@@ -1,7 +1,7 @@
 // Token Radar's entry program (Node 22, standard library only).
 //
 // Reads the sealed snapshot from /input/snapshot.json (or --input <file|dir>), scores every
-// pre-token protocol with the radar-2 model in lib/model.ts, writes the ranked board to
+// pre-token protocol with the radar-3 model in lib/model.ts, writes the ranked board to
 // /output/board.json, writes the dashboard's data beside the page, and copies this repository's
 // dashboard/ and screenshots/ to /output. Last, it writes /output/dossier.json, the summary the
 // judge reads, with the vendored make.fun library.
@@ -88,8 +88,10 @@ writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEX
 
 const totals = boardTotals(board);
 const averageImplied = totals.rows > 0 ? Math.round(totals.impliedUsd / totals.rows) : 0;
+const ownComps = Object.entries(radar.comps_counts).filter(([, n]) => n >= radar.model.comps_min_n).length;
 process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.early_size} early, ${radar.live_size} live set aside)\n` +
+    `token radar: calibration: market-wide comps multiple x${radar.comps_global} from ${radar.comps_n} tokenized comparables; ${ownComps} categories priced from their own comps\n` +
     `token radar: board totals ${totals.rows} rows, $${totals.impliedUsd.toLocaleString('en-US')} implied, $${totals.tvlUsd.toLocaleString('en-US')} TVL, $${averageImplied.toLocaleString('en-US')} average implied per row\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashboardFiles.length} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n` +
     board
