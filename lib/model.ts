@@ -245,20 +245,25 @@ export function ageDays(asOf: string, listedAt: string | null): number | null {
   return Math.max(0, Math.floor((a - b) / DAY_MS));
 }
 
+/** A linear interpolation between `from` and `to` at fraction `f` (0 to 1). */
+function lerp(from: number, to: number, f: number): number {
+  return from + f * (to - from);
+}
+
 /** The maturity multiplier for an age in days: a hump that peaks at three years. */
 export function maturityMultiplier(age: number | null, model: ModelConstants): number {
   if (age === null) return model.unknown_maturity;
   if (age < model.maturity_young_days) return model.maturity_young;
   if (age < model.maturity_year) {
     const f = (age - model.maturity_young_days) / (model.maturity_year - model.maturity_young_days);
-    return model.maturity_young + f * (1 - model.maturity_young);
+    return lerp(model.maturity_young, 1, f);
   }
   if (age < model.maturity_peak_days) {
     const f = (age - model.maturity_year) / (model.maturity_peak_days - model.maturity_year);
-    return 1 + f * (model.maturity_peak - 1);
+    return lerp(1, model.maturity_peak, f);
   }
   const f = Math.min((age - model.maturity_peak_days) / model.maturity_peak_days, 1);
-  return model.maturity_peak - f * (model.maturity_peak - model.maturity_old);
+  return lerp(model.maturity_peak, model.maturity_old, f);
 }
 
 /** The launch-precedent weight for a category: 1.00 when the model names no weight for it. */
@@ -273,6 +278,16 @@ export function breadthMultiplier(chainCount: number, model: ModelConstants): nu
   return 1 + extra * model.breadth_per_chain;
 }
 
+/**
+ * The growth multiplier for a clamped weekly change: gains count double the losses, so a
+ * fast-growing protocol is worth more than a shrinking one of the same size. The weight is
+ * per-cent points, applied to the clamped change.
+ */
+export function growthMultiplier(growthPct: number, model: ModelConstants): number {
+  const weight = growthPct >= 0 ? model.growth_weight_up : model.growth_weight_down;
+  return 1 + growthPct * weight;
+}
+
 /** The five multipliers and the implied value one protocol gets under `model`. */
 export function impliedValue(
   protocol: SnapshotProtocol,
@@ -282,9 +297,7 @@ export function impliedValue(
   const age = ageDays(asOf, protocol.listed_at);
   const rawGrowth = finite(protocol.change_7d, 0);
   const growthPct = Math.min(model.growth_cap, Math.max(model.growth_floor, rawGrowth));
-  // The weights are per-cent points: 1 + growthPct * weight, with the up weight for gains and
-  // the down weight for losses.
-  const growthMult = 1 + growthPct * (growthPct >= 0 ? model.growth_weight_up : model.growth_weight_down);
+  const growthMult = growthMultiplier(growthPct, model);
   const maturityMult = maturityMultiplier(age, model);
   const breadthMult = breadthMultiplier(protocol.chains.length, model);
   const categoryMult = categoryMultiplier(protocol.category);
@@ -407,22 +420,48 @@ function gasFor(chain: string): string {
   return 'under $1 of gas';
 }
 
+/**
+ * One action per category family, as [substring, template] pairs in priority order: the first
+ * substring that appears in the lowercased category wins. The template takes the protocol name,
+ * the capital and the chain, and returns the action sentence. A category that matches nothing
+ * falls through to the generic deposit action.
+ */
+const ACTION_RULES: Array<{ match: string; write: (name: string, capital: number, chain: string) => string }> = [
+  { match: 'lend', write: (name, capital, chain) => `Supply $${capital} of USDC to ${name} on ${chain} and keep the position open.` },
+  { match: 'cdp', write: (name, capital, chain) => `Supply $${capital} of USDC to ${name} on ${chain} and keep the position open.` },
+  { match: 'collateral', write: (name, capital, chain) => `Supply $${capital} of USDC to ${name} on ${chain} and keep the position open.` },
+  { match: 'dex', write: (name, capital, chain) => `Provide $${capital} of liquidity to ${name}'s main pool on ${chain} and keep the position open.` },
+  { match: 'yield', write: (name, capital, chain) => `Provide $${capital} of liquidity to ${name}'s main pool on ${chain} and keep the position open.` },
+  { match: 'leveraged farm', write: (name, capital, chain) => `Provide $${capital} of liquidity to ${name}'s main pool on ${chain} and keep the position open.` },
+  { match: 'bridge', write: (name, capital, chain) => `Bridge $${capital} of USDC to ${chain} through ${name} and use the bridged funds in its app.` },
+  { match: 'staking', write: (name, capital, chain) => `Stake $${capital} of the chain's staking asset through ${name} and keep the receipt.` },
+  { match: 'restak', write: (name, capital, chain) => `Stake $${capital} of the chain's staking asset through ${name} and keep the receipt.` },
+  { match: 'perpetual', write: (name, capital, chain) => `Deposit $${capital} of USDC as margin on ${name} and open one small hedge.` },
+  { match: 'derivative', write: (name, capital, chain) => `Deposit $${capital} of USDC as margin on ${name} and open one small hedge.` },
+  { match: 'prediction', write: (name, capital, chain) => `Fund $${capital} and place one market position on ${name}.` },
+  { match: 'curator', write: (name, capital, chain) => `Deposit $${capital} into a ${name} vault on ${chain} and keep the shares.` },
+  { match: 'allocator', write: (name, capital, chain) => `Deposit $${capital} into a ${name} vault on ${chain} and keep the shares.` },
+  { match: 'stable', write: (name, capital, chain) => `Mint or deposit $${capital} of the stable asset through ${name} on ${chain}.` },
+  { match: 'rwa', write: (name, capital, chain) => `Mint $${capital} of the protocol's yield asset on ${chain} and hold it.` },
+  { match: 'insurance', write: (name, capital, chain) => `Buy $${capital} of cover from ${name} on ${chain} and keep the policy.` },
+  { match: 'chain', write: (name, capital, chain) => `Use $${capital} on ${name}'s own chain: bridge in, then make one transaction a week in its app.` },
+];
+
 /** The category's one action, in the words a farmer can follow. */
 function actionFor(p: SnapshotProtocol, capital: number, chain: string): string {
   const c = (p.category ?? '').toLowerCase();
-  const name = p.name;
-  if (c.includes('lend') || c.includes('cdp') || c.includes('collateral')) return `Supply $${capital} of USDC to ${name} on ${chain} and keep the position open.`;
-  if (c.includes('dex') || c.includes('yield') || c.includes('leveraged farm')) return `Provide $${capital} of liquidity to ${name}'s main pool on ${chain} and keep the position open.`;
-  if (c.includes('bridge')) return `Bridge $${capital} of USDC to ${chain} through ${name} and use the bridged funds in its app.`;
-  if (c.includes('staking') || c.includes('restak')) return `Stake $${capital} of the chain's staking asset through ${name} and keep the receipt.`;
-  if (c.includes('perpetual') || c.includes('derivative')) return `Deposit $${capital} of USDC as margin on ${name} and open one small hedge.`;
-  if (c.includes('prediction')) return `Fund $${capital} and place one market position on ${name}.`;
-  if (c.includes('curator') || c.includes('allocator')) return `Deposit $${capital} into a ${name} vault on ${chain} and keep the shares.`;
-  if (c.includes('stable')) return `Mint or deposit $${capital} of the stable asset through ${name} on ${chain}.`;
-  if (c.includes('rwa')) return `Mint $${capital} of the protocol's yield asset on ${chain} and hold it.`;
-  if (c.includes('insurance')) return `Buy $${capital} of cover from ${name} on ${chain} and keep the policy.`;
-  if (c.includes('chain')) return `Use $${capital} on ${name}'s own chain: bridge in, then make one transaction a week in its app.`;
-  return `Deposit $${capital} of USDC into ${name} on ${chain} and keep the position open.`;
+  for (const rule of ACTION_RULES) {
+    if (c.includes(rule.match)) return rule.write(p.name, capital, chain);
+  }
+  return `Deposit $${capital} of USDC into ${p.name} on ${chain} and keep the position open.`;
+}
+
+/**
+ * A farm step, built from its action, its cost and its time. The seven steps of a plan share
+ * this shape: an action to take, what it costs, and how long it takes.
+ */
+function planStep(text: string, cost: string, time: string): FarmStep {
+  return { text, cost, time };
 }
 
 /**
@@ -437,41 +476,37 @@ export function farmSteps(p: SnapshotProtocol, age: number | null): FarmStep[] {
   const gas = gasFor(chain);
   const action = actionFor(p, capital, chain);
   return [
-    {
-      text: `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.`,
-      cost: 'under $3 of gas for the first transaction',
-      time: '5 minutes',
-    },
-    {
-      text: action,
-      cost: `$${capital} of capital and ${gas}`,
-      time: '15 minutes to set up',
-    },
-    {
-      text: `Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote.`,
-      cost: 'about $2 of gas a week',
-      time: '10 minutes a week',
-    },
-    {
-      text: `Check the protocol's points or quest page every week and finish any task it lists; skip any link that asks you to pay to claim.`,
-      cost: 'no fee to check',
-      time: '10 minutes a week',
-    },
-    {
-      text: `Hold the position for at least ${hold} days so the activity is counted in more than one snapshot.`,
-      cost: `the $${capital} stays in the position`,
-      time: `${hold} days`,
-    },
-    {
-      text: `Before you withdraw, open the protocol's own rewards page from its official site and claim only from the link it publishes.`,
-      cost: 'no fee to check, and never pay to claim',
-      time: '10 minutes',
-    },
-    {
-      text: `Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.`,
-      cost: 'nothing but the log',
-      time: '5 minutes',
-    },
+    planStep(
+      `Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.`,
+      'under $3 of gas for the first transaction',
+      '5 minutes',
+    ),
+    planStep(action, `$${capital} of capital and ${gas}`, '15 minutes to set up'),
+    planStep(
+      `Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote.`,
+      'about $2 of gas a week',
+      '10 minutes a week',
+    ),
+    planStep(
+      `Check the protocol's points or quest page every week and finish any task it lists; skip any link that asks you to pay to claim.`,
+      'no fee to check',
+      '10 minutes a week',
+    ),
+    planStep(
+      `Hold the position for at least ${hold} days so the activity is counted in more than one snapshot.`,
+      `the $${capital} stays in the position`,
+      `${hold} days`,
+    ),
+    planStep(
+      `Before you withdraw, open the protocol's own rewards page from its official site and claim only from the link it publishes.`,
+      'no fee to check, and never pay to claim',
+      '10 minutes',
+    ),
+    planStep(
+      `Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.`,
+      'nothing but the log',
+      '5 minutes',
+    ),
   ];
 }
 
