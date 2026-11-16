@@ -87,9 +87,10 @@ for (const name of shots) {
 writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEXT_MAX_BYTES, screenshots: SCREENSHOT_CAPS, dashboard: { max_files: 400, max_bytes: 4_194_304 } }));
 
 const totals = boardTotals(board);
+const averageImplied = totals.rows > 0 ? Math.round(totals.impliedUsd / totals.rows) : 0;
 process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (${radar.early_size} early, ${radar.live_size} live set aside)\n` +
-    `token radar: board totals ${totals.rows} rows, $${totals.impliedUsd.toLocaleString('en-US')} implied, $${totals.tvlUsd.toLocaleString('en-US')} TVL\n` +
+    `token radar: board totals ${totals.rows} rows, $${totals.impliedUsd.toLocaleString('en-US')} implied, $${totals.tvlUsd.toLocaleString('en-US')} TVL, $${averageImplied.toLocaleString('en-US')} average implied per row\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashboardFiles.length} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n` +
     board
       .slice(0, 3)
