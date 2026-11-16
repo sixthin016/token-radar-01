@@ -643,6 +643,20 @@ export function boardIssue(board: BoardRow[], snapshot: Snapshot): string | null
   return null;
 }
 
+/**
+ * The board's totals for the run log: how many rows, their combined implied value and their
+ * combined TVL, so a run's scale is one line. The values are plain sums of the rows as scored.
+ */
+export function boardTotals(board: BoardRow[]): { rows: number; impliedUsd: number; tvlUsd: number } {
+  let impliedUsd = 0;
+  let tvlUsd = 0;
+  for (const row of board) {
+    impliedUsd += row.implied_value_usd;
+    tvlUsd += row.tvl_usd;
+  }
+  return { rows: board.length, impliedUsd, tvlUsd };
+}
+
 /** A compact data.js: the dashboard's whole dataset as one script, no fetch and no network. */
 export function dataScript(radar: RadarData): string {
   return `window.RADAR=${JSON.stringify(radar)};\n`;
