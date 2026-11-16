@@ -6,6 +6,10 @@
 
 Token Radar (radar-2) scores every pre-token protocol from a sealed DeFi snapshot and ranks them by implied launch value, with a dark dashboard, seven-step farm plans and a byte-reproducible dossier.
 
+## How it works
+
+Each protocol's implied value is its TVL times 0.30, then five multipliers: growth (clamped weekly change, gains count double), maturity (a hump that peaks at three years without a token), breadth (more chains, more surface), and a launch-precedent weight by category. No protocol name is ever special-cased. The board covers the whole watchlist plus every rankable pre-token protocol below the floor, and the dashboard shows the model behind every row.
+
 ## Run it
 
 ```sh
