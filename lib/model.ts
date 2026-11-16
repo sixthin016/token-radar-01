@@ -647,3 +647,18 @@ export function boardIssue(board: BoardRow[], snapshot: Snapshot): string | null
 export function dataScript(radar: RadarData): string {
   return `window.RADAR=${JSON.stringify(radar)};\n`;
 }
+
+/**
+ * One board row as a single readable line for the run log: its rank, name and implied value,
+ * then the five multipliers that produced it, so a run's top rows can be read at a glance
+ * without opening the board. The multipliers are shown to two decimals; the value is a plain
+ * dollar figure.
+ */
+export function describeRow(row: BoardRow): string {
+  const m = row.model;
+  const money = `$${row.implied_value_usd.toLocaleString('en-US')}`;
+  const mults = `base ${m.base_multiple} x growth ${m.growth_multiplier.toFixed(2)} x maturity ${m.maturity_multiplier.toFixed(2)} x breadth ${m.breadth_multiplier.toFixed(2)} x category ${m.category_multiplier.toFixed(2)}`;
+  const age = m.age_days === null ? 'age unknown' : `${m.age_days} days old`;
+  const list = row.is_watchlist ? 'watchlist' : 'early';
+  return `#${row.rank} ${row.name} (${row.slug}) ${money} [${mults}] ${age}, ${list}`;
+}
