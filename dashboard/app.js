@@ -1,6 +1,8 @@
-// Token Radar's dashboard, radar-3. It reads window.RADAR (written beside dashboard/ by
+// Token Radar's dashboard, radar-4. It reads window.RADAR (written beside dashboard/ by
+// main.ts) and window.VALIDATION (the blind test's predictions, written into dashboard/ by
 // main.ts) and renders the ranked board, a filterable table, a per-protocol detail view with the
-// model's own inputs and the protocol's farm plan. No network: every byte it shows is in data.js.
+// model's own inputs and the protocol's farm plan. No network: every byte it shows is in data.js
+// and validation.js.
 (function () {
   'use strict';
 
@@ -32,7 +34,8 @@
 
   // The model in one function, mirroring lib/model.ts: the page recomputes a row from the snapshot
   // figures and checks the number board.json carries, so the page's code and the board's data are
-  // visibly the same arithmetic.
+  // visibly the same arithmetic. The curve value is the fitted value; the multipliers are the
+  // same shape the model uses.
   function maturityOf(age, model) {
     if (age === null || age === undefined) return model.unknown_maturity;
     if (age < model.maturity_young_days) return model.maturity_young;
@@ -52,8 +55,8 @@
     var growthMult = 1 + growth * (growth >= 0 ? model.growth_weight_up : model.growth_weight_down);
     var maturity = maturityOf(row.age_days, model);
     var breadth = 1 + Math.min(Math.max((row.chains || []).length - 1, 0), model.breadth_max_chains) * model.breadth_per_chain;
-    var base = row.base_multiple !== null && row.base_multiple !== undefined ? row.base_multiple : DATA.comps_global;
-    return Math.max(1, Math.round(row.tvl_usd * base * growthMult * maturity * breadth));
+    var base = row.curve_value_usd !== null && row.curve_value_usd !== undefined ? row.curve_value_usd : 0;
+    return Math.max(1, Math.round(base * growthMult * maturity * breadth));
   }
 
   function el(tag, attrs) {
@@ -222,23 +225,29 @@
 
   function lede() {
     var top = DATA.rows[0];
+    var v = DATA.validation;
+    var curve = DATA.curve;
     return el('section', { class: 'lede' },
       el('div', null,
-        el('h1', { text: DATA.watchlist_size + ' watchlist protocols, ranked by implied value' }),
+        el('h1', { text: DATA.board_size + ' pre-token protocols ranked by a fitted value model, tested blind' }),
         el('p', null,
           'The watchlist is the floor: every protocol with at least $', el('b', { text: Math.round(DATA.floor_usd / 1e6) + 'M' }),
           ' of TVL and no token on record. The early radar adds ', el('b', { text: String(DATA.early_size) }),
-          ' pre-token protocols below that floor, and the strongest of them all is ', el('b', { text: top ? top.name : '—' }),
+          ' pre-token protocols below that floor, plus ', el('b', { text: String(DATA.above_floor_size) }),
+          ' above it that the watchlist leaves out, and the strongest of them all is ', el('b', { text: top ? top.name : '—' }),
           ' at ', el('b', { text: top ? fmtUsd(top.implied_value_usd) : '—' }),
-          ' of implied value. Implied value is a model, not a promise.'
+          ' of implied value. The value is a fitted curve, not a hand-set multiple — and the curve was tested blind before it priced anything. Implied value is a model, not a promise.'
         )
       ),
       el('div', { class: 'facts' },
         el('div', { class: 'fact' }, el('span', { text: 'Watchlist covered' }), el('b', { text: DATA.watchlist_size + ' / ' + DATA.watchlist_size })),
-        el('div', { class: 'fact' }, el('span', { text: 'Pre-token rows scored' }), el('b', { text: String(DATA.board_size) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Early rows below the floor' }), el('b', { text: String(DATA.early_size) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Live-token protocols set aside' }), el('b', { text: String(DATA.live_size) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Median live-token multiple' }), el('b', { text: 'x' + DATA.comps_global }))
+        el('div', { class: 'fact' }, el('span', { text: 'Protocols scanned / ranked' }), el('b', { text: DATA.scanned + ' / ' + DATA.board_size })),
+        el('div', { class: 'fact' }, el('span', { text: 'Curve fitted on' }), el('b', { text: curve.train_n + ' live-token comps' })),
+        el('div', { class: 'fact' }, el('span', { text: 'Blind pinball (baseline ' + v.baseline.pinball.toFixed(3) + ')' }), el('b', { text: v.blind.pinball.toFixed(3) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Blind R² (baseline ' + v.baseline.r2_log.toFixed(2) + ')' }), el('b', { text: v.blind.r2_log.toFixed(2) })),
+        el('div', { class: 'fact' }, el('span', { text: '80% interval coverage' }), el('b', { text: Math.round(v.blind.coverage_80 * 100) + '% of ' + v.blind_scored_n + ' scored' })),
+        el('div', { class: 'fact' }, el('span', { text: 'Leave-one-out pinball / R²' }), el('b', { text: v.loo.pinball.toFixed(3) + ' / ' + v.loo.r2_log.toFixed(2) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Live-token protocols set aside' }), el('b', { text: String(DATA.live_size) }))
       )
     );
   }
