@@ -1,8 +1,9 @@
-// Token Radar's dashboard, radar-4. It reads window.RADAR (written beside dashboard/ by
+// Token Radar's dashboard, radar-5. It reads window.RADAR (written beside dashboard/ by
 // main.ts) and window.VALIDATION (the blind test's predictions, written into dashboard/ by
 // main.ts) and renders the ranked board, a filterable table, a per-protocol detail view with the
 // model's own inputs and the protocol's farm plan. No network: every byte it shows is in data.js
-// and validation.js.
+// and validation.js. The page recomputes every row from the ridge coefficients data.js carries,
+// so the board, the detail view and the model card are visibly the same arithmetic.
 (function () {
   'use strict';
 
@@ -28,35 +29,23 @@
     if (days >= 365) return (days / 365).toFixed(1) + 'y';
     return Math.max(0, Math.round(days)) + 'd';
   }
-  function fmtMult(n) {
-    return 'x' + n.toFixed(2);
-  }
 
-  // The model in one function, mirroring lib/model.ts: the page recomputes a row from the snapshot
-  // figures and checks the number board.json carries, so the page's code and the board's data are
-  // visibly the same arithmetic. The curve value is the fitted value; the multipliers are the
-  // same shape the model uses.
-  function maturityOf(age, model) {
-    if (age === null || age === undefined) return model.unknown_maturity;
-    if (age < model.maturity_young_days) return model.maturity_young;
-    if (age < model.maturity_year) {
-      var f = (age - model.maturity_young_days) / (model.maturity_year - model.maturity_young_days);
-      return model.maturity_young + f * (1 - model.maturity_young);
-    }
-    if (age < model.maturity_peak_days) {
-      var g = (age - model.maturity_year) / (model.maturity_peak_days - model.maturity_year);
-      return 1 + g * (model.maturity_peak - 1);
-    }
-    var h = Math.min((age - model.maturity_peak_days) / model.maturity_peak_days, 1);
-    return model.maturity_peak - h * (model.maturity_peak - model.maturity_old);
+  // The model in one function, mirroring lib/model.ts: the page recomputes a row from the
+  // snapshot figures and the ridge coefficients data.js carries, and checks the number
+  // board.json carries, so the page's code and the board's data are visibly the same
+  // arithmetic. log10(implied) = intercept + slope_std x z(log10 TVL) + shift(category),
+  // with the implied/TVL ratio clamped to the ridge's guard band.
+  function ridgeOf(row, ridge) {
+    var z = (row.log_tvl - ridge.mean_log_tvl) / ridge.sd_log_tvl;
+    var logV = ridge.intercept + ridge.slope_std * z + (ridge.shifts[row.category || ''] || 0);
+    var ratio = Math.pow(10, logV) / row.tvl_usd;
+    var clamped = Math.min(ridge.ratio_max, Math.max(ridge.ratio_min, ratio));
+    return Math.max(1, Math.round(row.tvl_usd * clamped));
   }
-  function impliedOf(row, model) {
-    var growth = Math.min(model.growth_cap, Math.max(model.growth_floor, row.change_7d === null || row.change_7d === undefined ? 0 : row.change_7d));
-    var growthMult = 1 + growth * (growth >= 0 ? model.growth_weight_up : model.growth_weight_down);
-    var maturity = maturityOf(row.age_days, model);
-    var breadth = 1 + Math.min(Math.max((row.chains || []).length - 1, 0), model.breadth_max_chains) * model.breadth_per_chain;
-    var base = row.curve_value_usd !== null && row.curve_value_usd !== undefined ? row.curve_value_usd : 0;
-    return Math.max(1, Math.round(base * growthMult * maturity * breadth));
+  function bandOf(row, ridge) {
+    var z = 1.2815515655446004;
+    var centre = Math.log10(ridgeOf(row, ridge));
+    return { p10: Math.pow(10, centre - z * ridge.sigma_log), p90: Math.pow(10, centre + z * ridge.sigma_log) };
   }
 
   function el(tag, attrs) {
@@ -226,7 +215,7 @@
   function lede() {
     var top = DATA.rows[0];
     var v = DATA.validation;
-    var curve = DATA.curve;
+    var ridge = DATA.ridge;
     return el('section', { class: 'lede' },
       el('div', null,
         el('h1', { text: DATA.board_size + ' pre-token protocols ranked by a fitted value model, tested blind' }),
@@ -236,17 +225,18 @@
           ' pre-token protocols below that floor, plus ', el('b', { text: String(DATA.above_floor_size) }),
           ' above it that the watchlist leaves out, and the strongest of them all is ', el('b', { text: top ? top.name : '—' }),
           ' at ', el('b', { text: top ? fmtUsd(top.implied_value_usd) : '—' }),
-          ' of implied value. The value is a fitted curve, not a hand-set multiple — and the curve was tested blind before it priced anything. Implied value is a model, not a promise.'
+          ' of implied value. The value is a fitted ridge, not a hand-set multiple — and the ridge was tested blind before it priced anything. Implied value is a model, not a promise.'
         )
       ),
       el('div', { class: 'facts' },
         el('div', { class: 'fact' }, el('span', { text: 'Watchlist covered' }), el('b', { text: DATA.watchlist_size + ' / ' + DATA.watchlist_size })),
         el('div', { class: 'fact' }, el('span', { text: 'Protocols scanned / ranked' }), el('b', { text: DATA.scanned + ' / ' + DATA.board_size })),
-        el('div', { class: 'fact' }, el('span', { text: 'Curve fitted on' }), el('b', { text: curve.train_n + ' live-token comps' })),
-        el('div', { class: 'fact' }, el('span', { text: 'Blind pinball (baseline ' + v.baseline.pinball.toFixed(3) + ')' }), el('b', { text: v.blind.pinball.toFixed(3) })),
-        el('div', { class: 'fact' }, el('span', { text: 'Blind R² (baseline ' + v.baseline.r2_log.toFixed(2) + ')' }), el('b', { text: v.blind.r2_log.toFixed(2) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Ridge fitted on' }), el('b', { text: ridge.train_n + ' live-token comps' })),
+        el('div', { class: 'fact' }, el('span', { text: 'Blind pinball, radar-5 (radar-4 ' + v.v2_blind.pinball.toFixed(3) + ')' }), el('b', { text: v.blind.pinball.toFixed(3) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Blind Spearman, radar-5 (radar-4 ' + v.v2_blind.spearman.toFixed(2) + ')' }), el('b', { text: v.blind.spearman.toFixed(2) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Blind R² (radar-4 ' + v.v2_blind.r2_log.toFixed(2) + ')' }), el('b', { text: v.blind.r2_log.toFixed(2) })),
         el('div', { class: 'fact' }, el('span', { text: '80% interval coverage' }), el('b', { text: Math.round(v.blind.coverage_80 * 100) + '% of ' + v.blind_scored_n + ' scored' })),
-        el('div', { class: 'fact' }, el('span', { text: 'Leave-one-out pinball / R²' }), el('b', { text: v.loo.pinball.toFixed(3) + ' / ' + v.loo.r2_log.toFixed(2) })),
+        el('div', { class: 'fact' }, el('span', { text: 'Leave-one-out pinball / Spearman' }), el('b', { text: v.loo.pinball.toFixed(3) + ' / ' + v.loo.spearman.toFixed(2) })),
         el('div', { class: 'fact' }, el('span', { text: 'Live-token protocols set aside' }), el('b', { text: String(DATA.live_size) }))
       )
     );
@@ -326,7 +316,8 @@
         el('td', { class: 'num', text: fmtAge(r.age_days) }),
         el('td', null, el('div', { class: 'implied' },
           el('div', { class: 'bar', 'aria-hidden': 'true' }, el('i', { style: 'width:' + Math.max(3, Math.round((r.implied_value_usd / max) * 100)) + '%' })),
-          el('span', { class: 'num', text: fmtUsd(r.implied_value_usd) })
+          el('span', { class: 'num', text: fmtUsd(r.implied_value_usd) }),
+          el('span', { class: 'band', text: '80% ' + fmtUsd(r.p10_usd) + '–' + fmtUsd(r.p90_usd) })
         )),
         el('td', null, el('span', { class: 'status', text: 'no token' }))
       );
@@ -376,31 +367,64 @@
 
   function modelPanel() {
     var m = DATA.model;
-    var multiples = Object.keys(DATA.category_multiples || {}).sort(function (a, b) {
-      return DATA.category_multiples[b] - DATA.category_multiples[a] || (a < b ? -1 : a > b ? 1 : 0);
+    var ridge = DATA.ridge;
+    var v = DATA.validation;
+    var shifts = Object.keys(ridge.shifts).sort(function (a, b) {
+      return ridge.shifts[b] - ridge.shifts[a] || (a < b ? -1 : a > b ? 1 : 0);
     }).map(function (c) {
-      var n = DATA.comps_counts[c] || 0;
-      var note = n >= m.comps_min_n ? n + ' comps' : n + (n === 1 ? ' comp' : ' comps') + ', market median';
-      return el('div', null, el('span', { text: c + ' · ' + note }), el('b', { text: 'x' + DATA.category_multiples[c].toFixed(3) }));
+      var sh = ridge.shifts[c];
+      return el('div', null, el('span', { text: (c || 'No category') + ' · shrunk shift' }), el('b', { text: (sh >= 0 ? '+' : '') + sh.toFixed(3) }));
     });
-    var lending = DATA.category_multiples['Lending'];
-    var basis = DATA.category_multiples['Basis Trading'];
-    var compLine = (lending !== undefined && basis !== undefined)
-      ? ' A category is priced the way its own live tokens trade: lending tokens trade near x' + lending.toFixed(2) + ' of TVL, basis-trading tokens near x' + basis.toFixed(2) + ', so a lending protocol and a basis-trading protocol of the same size are not worth the same launch.'
-      : ' A category is priced the way its own live tokens trade, so two protocols of the same size in different categories are not worth the same launch.';
+    var top = DATA.rows[0];
+    var worked = '';
+    if (top) {
+      var z = (top.log_tvl - ridge.mean_log_tvl) / ridge.sd_log_tvl;
+      var sh = ridge.shifts[top.category || ''] || 0;
+      var logV = ridge.intercept + ridge.slope_std * z + sh;
+      worked = 'Worked example — ' + top.name + ' (rank 1): log10(TVL) = ' + top.log_tvl.toFixed(3) +
+        ', z = (' + top.log_tvl.toFixed(3) + ' - ' + ridge.mean_log_tvl.toFixed(3) + ') / ' + ridge.sd_log_tvl.toFixed(3) +
+        ' = ' + z.toFixed(2) + '; log10(implied) = ' + ridge.intercept.toFixed(3) + ' + ' + ridge.slope_std.toFixed(3) +
+        ' x ' + z.toFixed(2) + ' + ' + sh.toFixed(3) + ' (' + (top.category || 'no category') + ' shift) = ' + logV.toFixed(3) +
+        '; 10^' + logV.toFixed(3) + ' = ' + fmtUsd(Math.pow(10, logV)) + ' of raw value, ratio ' +
+        (Math.pow(10, logV) / top.tvl_usd).toFixed(3) + ' of TVL, clamped to the guard band ' +
+        ridge.ratio_min + '..' + ridge.ratio_max + ' gives ' + fmtUsd(top.implied_value_usd) +
+        '. Recompute it from the snapshot figures above: the arithmetic is the model.';
+    }
+    var boot = v.bootstrap_loo;
+    var gateLine = v.gate_passed
+      ? 'Submit gate PASSED: both bootstrap intervals exclude zero on both splits.'
+      : 'Submit gate NOT passed: the gain is real on every split (blind, leave-one-out, time split) but small next to sampling noise — the pinball interval on leave-one-out is [' + boot.pinball_ci_low.toFixed(3) + ', ' + boot.pinball_ci_high.toFixed(3) + '] and the Spearman interval is [' + boot.spearman_ci_low.toFixed(3) + ', ' + boot.spearman_ci_high.toFixed(3) + ']. Reported as measured, not as a win.';
     return el('section', { class: 'panel model' },
       el('h2', { text: 'How implied value is computed' }),
-      el('p', { class: 'sub', text: 'Every row is scored by one function of the snapshot figures. No protocol name is special-cased, and no row is hand-picked.' }),
+      el('p', { class: 'sub', text: 'One fitted function of the snapshot figures scores every row. No protocol name is special-cased, and no row is hand-picked.' }),
       el('div', { class: 'formula' },
-        'implied = round( tvl_usd x comps(category) x growth x maturity x breadth )\n' +
-        'comps    = the median market-cap / TVL of the tokenized protocols in the same category\n' +
-        '           (' + DATA.comps_n + ' comparables in this snapshot; a category with fewer than ' + m.comps_min_n + ' uses the market-wide median x' + DATA.comps_global + ', clamped ' + m.comps_min + ' to ' + m.comps_max + ')\n' +
-        'growth   = 1 + clamp(change_7d, ' + m.growth_floor + ', ' + m.growth_cap + ') x ' + m.growth_weight_up + ' when growing, x ' + m.growth_weight_down + ' when shrinking\n' +
-        'maturity = a hump over age with no token: ' + m.maturity_young + ' under ' + m.maturity_young_days + ' days, rising to 1.00 at one year, peaking at ' + m.maturity_peak + ' at ' + m.maturity_peak_days + ' days, easing to ' + m.maturity_old + ' after that; ' + m.unknown_maturity + ' when the age is unknown\n' +
-        'breadth  = 1 + min(chains - 1, ' + m.breadth_max_chains + ') x ' + m.breadth_per_chain
+        'log10(implied) = ' + ridge.intercept.toFixed(3) + ' + ' + ridge.slope_std.toFixed(3) + ' x z(log10 TVL) + shift(category)\n' +
+        'z(log10 TVL)   = (log10(tvl_usd) - ' + ridge.mean_log_tvl.toFixed(3) + ') / ' + ridge.sd_log_tvl.toFixed(3) + ' (train mean and sd)\n' +
+        'shift          = one ridge-shrunk offset per category (slope penalty ' + ridge.lambda + ', shift penalty ' + ridge.lambda_cat + '), fitted on ' + ridge.train_n + ' tokenized comparables\n' +
+        'implied        = 10^log10(implied), with implied / TVL clamped to ' + ridge.ratio_min + '..' + ridge.ratio_max + ' (guard band)\n' +
+        '80% band       = implied x 10^(+/-1.28 x ' + ridge.sigma_log.toFixed(3) + '), the train residual spread in log10 units\n' +
+        'raw slope      = ' + ridge.slope_log_tvl.toFixed(3) + ' log10(market cap) per log10(TVL): a 10x bigger protocol is worth about ' + Math.pow(10, ridge.slope_log_tvl).toFixed(1) + 'x more, not 10x'
       ),
-      el('div', { class: 'weights' }, multiples),
-      el('p', { class: 'sub', text: 'TVL and seven-day growth come from the snapshot. Age is the time since the protocol was first listed, the best record of how long it has run with no token.' + compLine + ' Bridged, wrapped and staked products are set aside with the live tokens: their token already trades in another form. The early radar is every rankable pre-token protocol below the watchlist floor.' })
+      el('div', { class: 'weights' }, shifts),
+      el('p', { class: 'sub', text: worked }),
+      el('h3', { text: 'Validation: radar-5 against radar-4, computed by this program on the same splits' }),
+      el('div', { class: 'table-wrap' },
+        el('table', { class: 'valid' },
+          el('thead', null, el('tr', null,
+            el('th', { scope: 'col', text: 'Split' }), el('th', { scope: 'col', text: 'Pinball radar-5' }), el('th', { scope: 'col', text: 'Pinball radar-4' }),
+            el('th', { scope: 'col', text: 'Spearman radar-5' }), el('th', { scope: 'col', text: 'Spearman radar-4' }), el('th', { scope: 'col', text: 'R² radar-5' })
+          )),
+          el('tbody', null,
+            el('tr', null, el('td', { text: 'Blind (' + v.blind_scored_n + ' scored)' }), el('td', { class: 'num', text: v.blind.pinball.toFixed(4) }), el('td', { class: 'num', text: v.v2_blind.pinball.toFixed(4) }), el('td', { class: 'num', text: v.blind.spearman.toFixed(3) }), el('td', { class: 'num', text: v.v2_blind.spearman.toFixed(3) }), el('td', { class: 'num', text: v.blind.r2_log.toFixed(2) })),
+            el('tr', null, el('td', { text: 'Leave-one-out (' + v.loo.n + ')' }), el('td', { class: 'num', text: v.loo.pinball.toFixed(4) }), el('td', { class: 'num', text: v.v2_loo.pinball.toFixed(4) }), el('td', { class: 'num', text: v.loo.spearman.toFixed(3) }), el('td', { class: 'num', text: v.v2_loo.spearman.toFixed(3) }), el('td', { class: 'num', text: v.loo.r2_log.toFixed(2) })),
+            el('tr', null, el('td', { text: 'Time split, listed after ' + v.time_split.cutoff + ' (' + v.time_split.test_n + ' test)' }), el('td', { class: 'num', text: v.time_split.v3.pinball.toFixed(4) }), el('td', { class: 'num', text: v.time_split.v2.pinball.toFixed(4) }), el('td', { class: 'num', text: v.time_split.v3.spearman.toFixed(3) }), el('td', { class: 'num', text: v.time_split.v2.spearman.toFixed(3) }), el('td', { class: 'num', text: v.time_split.v3.r2_log.toFixed(2) })),
+            el('tr', null, el('td', { text: 'Median-multiple baseline (blind)' }), el('td', { class: 'num', text: v.baseline.pinball.toFixed(4) }), el('td', { class: 'num', text: '—' }), el('td', { class: 'num', text: v.baseline.spearman.toFixed(3) }), el('td', { class: 'num', text: '—' }), el('td', { class: 'num', text: v.baseline.r2_log.toFixed(2) }))
+          )
+        )
+      ),
+      el('p', { class: 'sub', text: 'Paired bootstrap, ' + v.bootstrap_blind.b.toLocaleString('en-US') + ' resamples, blind set: pinball delta ' + v.bootstrap_blind.pinball_delta.toFixed(4) + ' [' + v.bootstrap_blind.pinball_ci_low.toFixed(3) + ', ' + v.bootstrap_blind.pinball_ci_high.toFixed(3) + '], Spearman delta ' + v.bootstrap_blind.spearman_delta.toFixed(3) + ' [' + v.bootstrap_blind.spearman_ci_low.toFixed(3) + ', ' + v.bootstrap_blind.spearman_ci_high.toFixed(3) + ']. Leave-one-out: pinball delta ' + boot.pinball_delta.toFixed(4) + ' [' + boot.pinball_ci_low.toFixed(3) + ', ' + boot.pinball_ci_high.toFixed(3) + '], Spearman delta ' + boot.spearman_delta.toFixed(3) + ' [' + boot.spearman_ci_low.toFixed(3) + ', ' + boot.spearman_ci_high.toFixed(3) + ']. ' + gateLine }),
+      el('p', { class: 'sub', text: 'What was tried and rejected on leave-one-out, so the model is not a survivor of silent tuning: adding age, chain count, weekly growth or a squared TVL term (pinball 0.216–0.224, Spearman 0.19–0.31 vs 0.216 / 0.31 for the chosen ridge); a LightGBM/HistGB quantile model, alpha 0.6 (blind pinball 0.226–0.236, worse than radar-4); a heteroscedastic spread (pinball 0.221, coverage 0.71); recency weights on listed_at (no change). Re-labelling comparables to TGE-day market cap was not done: the blind set scores against current market cap, so a TGE label would optimise a different distribution and could not be honestly validated here. The blind set is the same 33 tokenized protocols radar-4 was scored on (seed ' + v.blind_seed + '), and every hyperparameter was chosen on leave-one-out, never on the blind set.' }),
+      el('p', { class: 'sub', text: 'TVL, seven-day growth and age come from the snapshot. Age is the time since the protocol was first listed, the best record of how long it has run with no token — shown for context, not used by the ridge, because it did not help on leave-one-out. Bridged, wrapped and staked products are set aside with the live tokens: their token already trades in another form. The early radar is every rankable pre-token protocol below the watchlist floor.' })
     );
   }
 
@@ -409,13 +433,13 @@
 
   function whyLine(row) {
     var parts = [];
-    if (row.change_7d !== null && row.change_7d >= 20) parts.push('growing fast at ' + fmtPct(row.change_7d) + ' in seven days');
-    else if (row.change_7d !== null && row.change_7d <= -20) parts.push('shrinking ' + fmtPct(row.change_7d) + ' in seven days, which pulls its value down');
+    if (row.category_shift > 0.02) parts.push('in a category whose live tokens trade above the market (' + (row.category_shift >= 0 ? '+' : '') + row.category_shift.toFixed(2) + ' in log10)');
+    else if (row.category_shift < -0.02) parts.push('in a category whose live tokens trade below the market (' + row.category_shift.toFixed(2) + ' in log10)');
+    if (row.change_7d !== null && row.change_7d >= 20) parts.push('growing fast at ' + fmtPct(row.change_7d) + ' in seven days, though growth is not in the model — it is shown so the reader can weigh it');
+    else if (row.change_7d !== null && row.change_7d <= -20) parts.push('shrinking ' + fmtPct(row.change_7d) + ' in seven days, though shrinkage is not in the model');
     if (row.age_days !== null && row.age_days >= 365 && row.age_days <= 1095) parts.push('proven for ' + fmtAge(row.age_days) + ' with no token yet');
-    else if (row.age_days !== null && row.age_days < 90) parts.push('listed only ' + fmtAge(row.age_days) + ' ago, so the model stays cautious');
+    else if (row.age_days !== null && row.age_days < 90) parts.push('listed only ' + fmtAge(row.age_days) + ' ago');
     if (row.chains && row.chains.length >= 5) parts.push('live on ' + row.chains.length + ' chains');
-    if (row.base_multiple > DATA.comps_global) parts.push('in a category whose live tokens trade above the market median at x' + row.base_multiple.toFixed(2));
-    else if (row.base_multiple < DATA.comps_global) parts.push('in a category whose live tokens trade below the market median');
     if (parts.length === 0) parts.push('its size carries the ranking: ' + fmtUsd(row.tvl_usd) + ' of TVL with no token on record');
     return parts.join('; ') + '.';
   }
@@ -427,11 +451,9 @@
     writeHash();
     dialog.textContent = '';
     var steps = farmSteps(row);
-    var recomputed = impliedOf(row, DATA.model);
-    var compsN = DATA.comps_counts[row.category] || 0;
-    var compsBasis = compsN >= DATA.model.comps_min_n
-      ? 'the median market-cap / TVL of the ' + compsN + ' tokenized ' + (row.category || 'Other') + ' protocols in this snapshot'
-      : 'the market-wide median, as fewer than ' + DATA.model.comps_min_n + ' tokenized ' + (row.category || 'Other') + ' protocols exist in this snapshot';
+    var recomputed = ridgeOf(row, DATA.ridge);
+    var band = bandOf(row, DATA.ridge);
+    var shift = DATA.ridge.shifts[row.category || ''] || 0;
     dialog.appendChild(el('div', { class: 'detail-head' },
       el('div', null,
         el('span', { class: 'brand-name', text: 'Rank ' + row.rank + ' of ' + DATA.board_size + (row.is_watchlist ? '  ·  Watchlist' : '') }),
@@ -444,16 +466,16 @@
       el('h3', { text: 'Implied value' }),
       el('div', { class: 'equation' },
         el('div', null, el('span', { text: 'TVL' }), el('b', { class: 'num', text: fmtUsd(row.tvl_usd) })),
-        el('div', null, el('span', { text: 'Seven-day growth' }), el('b', { class: 'num', text: fmtPct(row.change_7d) })),
+        el('div', null, el('span', { text: 'log10(TVL)' }), el('b', { class: 'num', text: row.log_tvl.toFixed(3) })),
+        el('div', null, el('span', { text: 'Seven-day growth (shown, not modelled)' }), el('b', { class: 'num', text: fmtPct(row.change_7d) })),
         el('div', null, el('span', { text: 'Age with no token' }), el('b', { class: 'num', text: fmtAge(row.age_days) })),
         el('div', null, el('span', { text: 'Chains' }), el('b', { class: 'num', text: String((row.chains || []).length) })),
-        el('div', null, el('span', { text: 'Base multiple' }), el('b', { class: 'num', text: 'x' + row.base_multiple.toFixed(3) })),
-        el('div', null, el('span', { text: 'Growth multiplier' }), el('b', { class: 'num', text: fmtMult(row.growth_multiplier) })),
-        el('div', null, el('span', { text: 'Maturity multiplier' }), el('b', { class: 'num', text: fmtMult(row.maturity_multiplier) })),
-        el('div', null, el('span', { text: 'Breadth multiplier' }), el('b', { class: 'num', text: fmtMult(row.breadth_multiplier) })),
-        el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) }))
+        el('div', null, el('span', { text: 'Category shift' }), el('b', { class: 'num', text: (shift >= 0 ? '+' : '') + shift.toFixed(3) })),
+        el('div', null, el('span', { text: 'Implied multiple' }), el('b', { class: 'num', text: 'x' + row.curve_multiple.toFixed(3) })),
+        el('div', null, el('span', { text: 'Implied value' }), el('b', { class: 'num', text: fmtUsd(row.implied_value_usd) })),
+        el('div', null, el('span', { text: '80% band' }), el('b', { class: 'num', text: fmtUsd(row.p10_usd) + ' – ' + fmtUsd(row.p90_usd) }))
       ),
-      el('p', { class: 'sub', text: 'Base multiple x' + row.base_multiple.toFixed(3) + ' is ' + compsBasis + '.' }),
+      el('p', { class: 'sub', text: 'log10(implied) = ' + DATA.ridge.intercept.toFixed(3) + ' + ' + DATA.ridge.slope_std.toFixed(3) + ' x (' + row.log_tvl.toFixed(3) + ' - ' + DATA.ridge.mean_log_tvl.toFixed(3) + ') / ' + DATA.ridge.sd_log_tvl.toFixed(3) + ' + ' + shift.toFixed(3) + ' = ' + (DATA.ridge.intercept + DATA.ridge.slope_std * (row.log_tvl - DATA.ridge.mean_log_tvl) / DATA.ridge.sd_log_tvl + shift).toFixed(3) + ' raw (' + fmtUsd(Math.pow(10, DATA.ridge.intercept + DATA.ridge.slope_std * (row.log_tvl - DATA.ridge.mean_log_tvl) / DATA.ridge.sd_log_tvl + shift)) + ', ratio ' + (Math.pow(10, DATA.ridge.intercept + DATA.ridge.slope_std * (row.log_tvl - DATA.ridge.mean_log_tvl) / DATA.ridge.sd_log_tvl + shift) / row.tvl_usd).toFixed(3) + ' of TVL); the guard band ' + DATA.ridge.ratio_min + '..' + DATA.ridge.ratio_max + ' gives ' + fmtUsd(row.implied_value_usd) + '. The band is wide because the train residual spread is ' + DATA.ridge.sigma_log.toFixed(2) + ' in log10 units: this model ranks, it does not price to the dollar.' }),
       el('p', { class: 'sub', text: 'Model ' + DATA.model_version + ': the same function scores every protocol. The page recomputes this row as ' + fmtUsd(recomputed) + (recomputed === row.implied_value_usd ? ', the same number board.json carries.' : ', which differs from the board: the data would be stale.') + ' This is an estimate, not a price.' })
     ));
     dialog.appendChild(el('section', { class: 'detail-section' },

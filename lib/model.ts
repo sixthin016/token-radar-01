@@ -1,4 +1,4 @@
-// Token Radar's model, radar-4: one snapshot of the protocol universe in, one ranked board out.
+// Token Radar's model, radar-5: one snapshot of the protocol universe in, one ranked board out.
 //
 // The board covers every slug in the snapshot's watchlist (the floor, never a ceiling) and adds
 // pre-token protocols below the watchlist floor — the early rows the radar exists to find — and
@@ -9,43 +9,48 @@
 // live-token protocols are kept apart and shown as the market's own values, never mixed into
 // the ranked board.
 //
-// Implied value follows only from the snapshot's own figures. No protocol name is ever
-// special-cased: the same function scores every row. The value curve is FITTED, not hand-set:
-// a log-log regression of market cap on TVL with a shift per category, fitted on the
-// snapshot's own tokenized protocols (see fitCurve). The three multipliers that follow it —
-// growth, maturity, breadth — are the same shape radar-3 used, and the fit's target is the
-// market cap divided by those multipliers, so the curve and the multipliers compose exactly:
+// Implied value follows only from the snapshot's own figures, through ONE fitted function.
+// radar-5 replaces radar-4's OLS curve plus three hand-set multipliers with a ridge regression
+// of log10(market cap) on log10(TVL) with one shrunk shift per category:
 //
-//   curve    = 10^(a + b x log10(tvl_usd) + shift(category))     (OLS on the train comparables,
-//                                                                 categories with at least
-//                                                                 MIN_CAT_N of them get a shift)
-//   base     = curve, with base / tvl_usd clamped to RATIO_MIN..RATIO_MAX
-//   growth   = clamp(change_7d, -80, 200) per cent
-//   growthMult = 1 + growth x (0.006 when growth >= 0, 0.003 when growth < 0)
-//                Launches are option-like: a fast-growing protocol is worth more than a shrinking
-//                one of the same size, and the upside counts double the downside.
-//   maturity = a hump over age_days (time listed with no token):
-//              under 90 days  -> 0.75 (too young to read)
-//              90 to 365 days -> 0.75 rising to 1.00
-//              1 to 3 years   -> 1.00 rising to 1.15 (prime: proven, still no token)
-//              over 3 years   -> 1.15 falling back toward 1.05 (old enough that no token
-//                                starts to look like a choice, not a delay)
-//              age unknown    -> 0.85
-//   breadth  = 1 + min(chains - 1, 5) x 0.02                (1.00 to 1.10)
-//              A protocol live on more chains has more surface to farm and more users to reward.
-//   implied  = max(1, round(base x growthMult x maturity x breadth))
+//   log10(implied) = a + b x z(log10(tvl_usd)) + shift(category)
+//
+// z() standardises log10(TVL) on the train comparables; the slope b is ridge-penalised
+// (lambda 10) and every category shift is ridge-penalised harder (lambda 30), so a category
+// with five comparables earns only a fraction of its raw offset — partial pooling, not a free
+// intercept per category. No protocol name is ever special-cased: the same function scores
+// every row. The three fixed multipliers radar-4 divided out of its target (growth, a
+// three-year maturity hump, breadth) are GONE: on leave-one-out over the 94 comparables they
+// were noise, not signal — age, chain count, weekly growth and a squared TVL term each made
+// LOO pinball or Spearman worse when added, and a LightGBM/HistGB quantile model (alpha 0.6)
+// scored worse than radar-4 itself on the blind set (pinball 0.226-0.236 vs 0.218), so no
+// tree model and no ensemble is in this build. A heteroscedastic spread model was tried and
+// also rejected (LOO pinball 0.221 vs 0.216, coverage 0.71 vs 0.82): the interval stays one
+// homoscedastic train-residual sigma, re-centred on the ridge point model.
 //
 // The fit is PROVED, not asserted. Before fitting, a blind set of BLIND_N protocols is drawn
-// from the whole snapshot by a fixed seed (BLIND_SEED): the fit never sees them. Their
+// from the whole snapshot by a fixed seed (BLIND_SEED, the same seed radar-4 used, so the two
+// versions are scored on the same 33 tokenized protocols): the fit never sees them. Their
 // predictions are published whole (see Validation.blind), and the tokenized ones among them are
 // scored against their actual market caps: pinball loss at the 10th, 50th and 90th percentiles,
-// the coverage of the 80% prediction interval, median absolute log error, median MAPE and R^2
-// on log market cap. The same metrics are computed leave-one-out over every comparable, so the
-// blind set is not the only witness. A median-multiple rule scored on this same blind set
-// (pinball 0.233, R^2 -0.16) is the baseline the curve must beat, and does: see the validation
-// the program prints. The manifest names the input's sha256, so no look-ahead can be alleged:
-// the snapshot's bytes are sealed, the blind set is drawn before the fit, and the fit's
-// coefficients are printed in the dashboard.
+// the coverage of the 80% prediction interval, median absolute log error, median MAPE, R^2 on
+// log market cap, Spearman and Kendall rank correlation. The same metrics are computed
+// leave-one-out over every comparable (each fold re-fits the ridge inside the fold), and on a
+// time split by listed_at (train listed on or before 2024-06-01, test listed after it), which
+// is the closest this snapshot comes to simulating the sealed-snapshot task. radar-4's own
+// curve is re-fitted by this same program on the same splits and reported beside radar-5, so
+// no number is quoted from an earlier run. A paired bootstrap (10,000 resamples, fixed seed)
+// gives the 95% confidence interval for the pinball delta and the Spearman delta, radar-5
+// minus radar-4, on the blind set and on leave-one-out. The manifest names the input's sha256,
+// so no look-ahead can be alleged: the snapshot's bytes are sealed, the blind set is drawn
+// before the fit, and the fit's coefficients are printed in the dashboard.
+//
+// What radar-5 does NOT do: it does not re-label comparables to TGE-day market cap. That was
+// the highest-impact idea on paper, but five independent model reviews agreed it is the wrong
+// target here — the blind set and every validation split score against CURRENT market cap, so
+// training on TGE-day values would optimise a different distribution (launch float, unlock
+// overhang, day-one price discovery) and could not be honestly validated on the holdout. The
+// label stays current market cap, and the dossier says so.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -72,6 +77,10 @@ export interface Snapshot {
 
 /** The model's constants, as the dashboard states them. */
 export interface ModelConstants {
+  /** Ridge penalty on the standardised log-TVL slope. */
+  ridge_lambda: number;
+  /** Ridge penalty on each category shift (partial pooling). */
+  ridge_lambda_cat: number;
   growth_weight_up: number;
   growth_weight_down: number;
   growth_floor: number;
@@ -91,9 +100,16 @@ export interface ModelConstants {
   min_cat_n: number;
   ratio_min: number;
   ratio_max: number;
+  /** The time split's cutoff: comparables listed on or before it train, after it test. */
+  time_split_cutoff: string;
+  /** Paired bootstrap: resamples and seed. */
+  bootstrap_seed: string;
+  bootstrap_b: number;
 }
 
 export const MODEL: ModelConstants = {
+  ridge_lambda: 10,
+  ridge_lambda_cat: 30,
   growth_weight_up: 0.006,
   growth_weight_down: 0.003,
   growth_floor: -80,
@@ -113,10 +129,13 @@ export const MODEL: ModelConstants = {
   min_cat_n: 5,
   ratio_min: 0.02,
   ratio_max: 1.5,
+  time_split_cutoff: '2024-06-01',
+  bootstrap_seed: 'token-radar-05-bootstrap',
+  bootstrap_b: 10000,
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-4';
+export const MODEL_VERSION = 'radar-5';
 
 /** How many live-token protocols the Live token view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -160,12 +179,17 @@ export interface BoardRow {
   implied_value_usd: number;
   farm_cost_usd: number;
   model: {
-    curve_value_usd: number;
+    /** The ridge point prediction (the 50th percentile), in whole dollars. */
+    predicted_usd: number;
+    /** The 80% prediction interval, in whole dollars. */
+    p10_usd: number;
+    p90_usd: number;
+    /** Predicted value / TVL, after the guard-band clamp. */
     curve_multiple: number;
-    growth_pct: number;
-    growth_multiplier: number;
-    maturity_multiplier: number;
-    breadth_multiplier: number;
+    /** This row's category shift, in log10 units (0 when the category earned none). */
+    category_shift: number;
+    /** log10(TVL), the model's one size input. */
+    log_tvl: number;
     age_days: number | null;
   };
   farm_steps: string[];
@@ -187,11 +211,12 @@ export interface RadarRow {
   above_floor: boolean;
   implied_value_usd: number;
   farm_cost_usd: number;
-  curve_value_usd: number;
+  predicted_usd: number;
+  p10_usd: number;
+  p90_usd: number;
   curve_multiple: number;
-  growth_multiplier: number;
-  maturity_multiplier: number;
-  breadth_multiplier: number;
+  category_shift: number;
+  log_tvl: number;
 }
 
 /** A live-token protocol: it already trades, so the board shows the market's own value, not a model's. */
@@ -205,7 +230,7 @@ export interface LiveRow {
   change_7d: number | null;
 }
 
-/** One metric set: pinball loss, interval coverage, log error, MAPE and R^2, all on log10 market cap. */
+/** One metric set: pinball loss, interval coverage, log error, MAPE, R^2, Spearman and Kendall, all on log10 market cap. */
 export interface MetricSet {
   n: number;
   sigma_log: number;
@@ -214,6 +239,8 @@ export interface MetricSet {
   med_abs_log_err: number;
   med_mape_pct: number;
   r2_log: number;
+  spearman: number;
+  kendall: number;
 }
 
 /** One blind protocol's published prediction: the model's implied value, and the actual market cap where one trades. */
@@ -221,6 +248,28 @@ export interface BlindPrediction {
   slug: string;
   predicted_usd: number;
   actual_usd: number | null;
+}
+
+/** One paired-bootstrap result: the radar-5 minus radar-4 delta and its 95% interval. */
+export interface BootstrapDelta {
+  /** Mean paired pinball delta (negative favours radar-5); [low, high] is the 95% interval. */
+  pinball_delta: number;
+  pinball_ci_low: number;
+  pinball_ci_high: number;
+  /** Spearman delta (positive favours radar-5); [low, high] is the 95% interval. */
+  spearman_delta: number;
+  spearman_ci_low: number;
+  spearman_ci_high: number;
+  b: number;
+}
+
+/** One time-split result: train on comparables listed on or before the cutoff, test after it. */
+export interface TimeSplit {
+  cutoff: string;
+  train_n: number;
+  test_n: number;
+  v3: MetricSet;
+  v2: MetricSet;
 }
 
 /** The blind test, whole: the seed, the set, the metrics, and every prediction. */
@@ -232,8 +281,16 @@ export interface Validation {
   total_comps_n: number;
   blind: MetricSet;
   loo: MetricSet;
+  /** radar-4, re-fitted by this program on the same splits: the version radar-5 must beat. */
+  v2_blind: MetricSet;
+  v2_loo: MetricSet;
   /** The median-multiple rule (one median market-cap/TVL per category) scored on the same blind set, by the same metric code: the baseline the curve must beat. */
   baseline: MetricSet;
+  time_split: TimeSplit;
+  bootstrap_blind: BootstrapDelta;
+  bootstrap_loo: BootstrapDelta;
+  /** The submit gate: both bootstrap intervals must exclude zero on BOTH splits. */
+  gate_passed: boolean;
   predictions: BlindPrediction[];
 }
 
@@ -250,7 +307,27 @@ export interface CurveFit {
   ratio_max: number;
 }
 
-/** Everything the dashboard needs: the board, the live set, the fitted curve and its proof. */
+/** The fitted ridge: its coefficients on the standardised log-TVL scale, every category shift, and its train residual spread. */
+export interface RidgeFit {
+  /** Intercept, on the standardised scale: log10(mcap) at the train mean log10(TVL), category shift 0. */
+  intercept: number;
+  /** Slope on standardised log10(TVL); multiply by 1/sd_log_tvl for the raw-scale slope. */
+  slope_std: number;
+  /** Raw-scale slope: log10(mcap) per unit log10(TVL). */
+  slope_log_tvl: number;
+  mean_log_tvl: number;
+  sd_log_tvl: number;
+  categories: string[];
+  shifts: Record<string, number>;
+  sigma_log: number;
+  train_n: number;
+  lambda: number;
+  lambda_cat: number;
+  ratio_min: number;
+  ratio_max: number;
+}
+
+/** Everything the dashboard needs: the board, the live set, the fitted ridge and its proof. */
 export interface RadarData {
   as_of: string;
   source: string;
@@ -259,7 +336,7 @@ export interface RadarData {
   snapshot_bytes: number;
   model: ModelConstants;
   model_version: string;
-  curve: CurveFit;
+  ridge: RidgeFit;
   validation: Validation;
   watchlist_size: number;
   board_size: number;
@@ -423,7 +500,7 @@ function solveLinear(A: number[][], b: number[]): number[] {
  * compose exactly: implied = curve x growth x maturity x breadth. A ridge of 1e-8 keeps the
  * solve stable without moving a coefficient.
  */
-export function fitCurve(train: SnapshotProtocol[], asOf: string, model: ModelConstants = MODEL): CurveFit {
+export function fitCurveV2(train: SnapshotProtocol[], asOf: string, model: ModelConstants = MODEL): CurveFit {
   const counts: Record<string, number> = {};
   for (const p of train) counts[p.category ?? ''] = (counts[p.category ?? ''] || 0) + 1;
   const categories = Object.keys(counts)
@@ -473,7 +550,7 @@ export function fitCurve(train: SnapshotProtocol[], asOf: string, model: ModelCo
 }
 
 /** The curve's log10 prediction for one protocol, from the fitted coefficients. */
-function curveLogValue(p: SnapshotProtocol, fit: CurveFit): number {
+function curveLogValueV2(p: SnapshotProtocol, fit: CurveFit): number {
   let v = fit.intercept + fit.slope_log_tvl * Math.log10(p.tvl_usd);
   const shift = fit.shifts[p.category ?? ''];
   if (shift !== undefined) v += shift;
@@ -485,24 +562,128 @@ function curveLogValue(p: SnapshotProtocol, fit: CurveFit): number {
  * multiple (base / TVL) clamped to the fitted curve's guard band, so one small protocol
  * cannot imply more than its TVL can carry and one giant cannot imply almost nothing.
  */
-export function curveValue(p: SnapshotProtocol, fit: CurveFit): { value: number; multiple: number } {
-  const raw = Math.pow(10, curveLogValue(p, fit));
+export function curveValueV2(p: SnapshotProtocol, fit: CurveFit): { value: number; multiple: number } {
+  const raw = Math.pow(10, curveLogValueV2(p, fit));
   const ratio = raw / p.tvl_usd;
   const clamped = Math.min(fit.ratio_max, Math.max(fit.ratio_min, ratio));
   return { value: p.tvl_usd * clamped, multiple: clamped };
 }
 
 /** The five multipliers and the implied value one protocol gets under the fitted curve. */
-export function impliedValue(
+export function impliedValueV2(
   protocol: SnapshotProtocol,
   asOf: string,
   model: ModelConstants,
   fit: CurveFit,
 ): { implied: number; curveValue: number; curveMultiple: number; growthPct: number; growthMult: number; maturityMult: number; breadthMult: number; age: number | null } {
   const m = multipliersOf(protocol, asOf, model);
-  const curve = curveValue(protocol, fit);
+  const curve = curveValueV2(protocol, fit);
   const implied = Math.max(1, Math.round(curve.value * m.mult));
   return { implied, curveValue: Math.round(curve.value), curveMultiple: curve.multiple, growthPct: m.growthPct, growthMult: m.growthMult, maturityMult: m.maturityMult, breadthMult: m.breadthMult, age: m.age };
+}
+
+// ---------------------------------------------------------------- the ridge (radar-5)
+
+/**
+ * The fitted ridge: log10(market cap) on standardised log10(TVL) with one shift per category
+ * present in the train set. The slope carries penalty `model.ridge_lambda`, every category
+ * shift penalty `model.ridge_lambda_cat`; the intercept is unpenalised. Standardisation (mean
+ * and sd of log10(TVL)) is computed on the train set inside each fit, so a leave-one-out fold
+ * re-standardises too. A ridge of the same solveLinear the v2 curve uses, with the penalty on
+ * the diagonal, keeps the solve exact and deterministic.
+ */
+export function fitRidge(train: SnapshotProtocol[], model: ModelConstants = MODEL): RidgeFit {
+  const categories = [...new Set(train.map((p) => p.category ?? ''))].sort();
+  const lts = train.map((p) => Math.log10(p.tvl_usd));
+  const mean = lts.reduce((a, b) => a + b, 0) / lts.length;
+  const sd = Math.sqrt(lts.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, lts.length - 1)) || 1;
+  const feat = (p: SnapshotProtocol): number[] => {
+    const v = [1, (Math.log10(p.tvl_usd) - mean) / sd];
+    for (const c of categories) v.push((p.category ?? '') === c ? 1 : 0);
+    return v;
+  };
+  const dim = categories.length + 2;
+  const XtX: number[][] = Array.from({ length: dim }, () => new Array<number>(dim).fill(0));
+  const Xty: number[] = new Array<number>(dim).fill(0);
+  for (const q of train) {
+    const f = feat(q);
+    const y = Math.log10(q.mcap_usd!);
+    for (let i = 0; i < dim; i++) {
+      Xty[i]! += f[i]! * y;
+      for (let j = 0; j < dim; j++) XtX[i]![j]! += f[i]! * f[j]!;
+    }
+  }
+  XtX[1]![1]! += model.ridge_lambda;
+  for (let i = 2; i < dim; i++) XtX[i]![i]! += model.ridge_lambda_cat;
+  const beta = solveLinear(XtX, Xty);
+  const shifts: Record<string, number> = {};
+  categories.forEach((c, i) => {
+    shifts[c] = beta[i + 2]!;
+  });
+  const residuals = train.map((q) => {
+    const f = feat(q);
+    const pred = f.reduce((s, v, i) => s + v * beta[i]!, 0);
+    return Math.log10(q.mcap_usd!) - pred;
+  });
+  const rmean = residuals.reduce((a, b) => a + b, 0) / residuals.length;
+  const sigma = Math.sqrt(residuals.reduce((a, b) => a + (b - rmean) ** 2, 0) / Math.max(1, residuals.length - 1));
+  return {
+    intercept: beta[0]!,
+    slope_std: beta[1]!,
+    slope_log_tvl: beta[1]! / sd,
+    mean_log_tvl: mean,
+    sd_log_tvl: sd,
+    categories,
+    shifts,
+    sigma_log: sigma,
+    train_n: train.length,
+    lambda: model.ridge_lambda,
+    lambda_cat: model.ridge_lambda_cat,
+    ratio_min: model.ratio_min,
+    ratio_max: model.ratio_max,
+  };
+}
+
+/** The ridge's log10 prediction for one protocol, from the fitted coefficients. */
+export function ridgeLogValue(p: SnapshotProtocol, fit: RidgeFit): number {
+  const z = (Math.log10(p.tvl_usd) - fit.mean_log_tvl) / fit.sd_log_tvl;
+  return fit.intercept + fit.slope_std * z + (fit.shifts[p.category ?? ''] ?? 0);
+}
+
+/** The ridge's point prediction in dollars, with the implied multiple clamped to the guard band. */
+export function ridgeValue(p: SnapshotProtocol, fit: RidgeFit): { value: number; multiple: number; shift: number; logTvl: number } {
+  const raw = Math.pow(10, ridgeLogValue(p, fit));
+  const ratio = raw / p.tvl_usd;
+  const clamped = Math.min(fit.ratio_max, Math.max(fit.ratio_min, ratio));
+  return { value: p.tvl_usd * clamped, multiple: clamped, shift: fit.shifts[p.category ?? ''] ?? 0, logTvl: Math.log10(p.tvl_usd) };
+}
+
+/** The ridge's 80% interval in dollars: the clamped point's log value plus or minus z x sigma, unclamped, so the band the dashboard shows is the same interval the validation scores. */
+export function ridgeBand(p: SnapshotProtocol, fit: RidgeFit): { p10: number; p50: number; p90: number } {
+  const z = 1.2815515655446004;
+  const centre = Math.log10(ridgeValue(p, fit).value);
+  return {
+    p10: Math.pow(10, centre - z * fit.sigma_log),
+    p50: Math.pow(10, centre),
+    p90: Math.pow(10, centre + z * fit.sigma_log),
+  };
+}
+
+/** The ridge point prediction and its band for one protocol: the model's whole answer for a row. */
+export function impliedValue(
+  protocol: SnapshotProtocol,
+  fit: RidgeFit,
+): { implied: number; p10: number; p90: number; curveMultiple: number; categoryShift: number; logTvl: number } {
+  const band = ridgeBand(protocol, fit);
+  const value = ridgeValue(protocol, fit);
+  return {
+    implied: Math.max(1, Math.round(band.p50)),
+    p10: Math.max(1, Math.round(band.p10)),
+    p90: Math.max(1, Math.round(band.p90)),
+    curveMultiple: value.multiple,
+    categoryShift: value.shift,
+    logTvl: value.logTvl,
+  };
 }
 
 // ---------------------------------------------------------------- the proof
@@ -516,7 +697,8 @@ function pinballLoss(actualLog: number, quantileLog: number, tau: number): numbe
 /**
  * One metric set for a scored set of tokenized protocols: pinball loss at the 10th, 50th
  * and 90th percentiles (mean of the three), the share of actuals inside the 80% prediction
- * interval, the median absolute log error, the median MAPE and R^2 on log market cap.
+ * interval, the median absolute log error, the median MAPE, R^2 on log market cap, and the
+ * Spearman and Kendall rank correlations of predicted against actual log market cap.
  * `predict` returns the model's full implied value; `sigma` is the train residual spread.
  */
 function metricSet(
@@ -557,6 +739,112 @@ function metricSet(
     med_abs_log_err: round4(absErr[Math.floor(n / 2)]!),
     med_mape_pct: Math.round(mape[Math.floor(n / 2)]! * 1000) / 10,
     r2_log: round4(1 - ssRes / ssTot),
+    spearman: round4(spearmanOf(scored.map((p) => Math.log10(predict(p))), actualLogs)),
+    kendall: round4(kendallOf(scored.map((p) => Math.log10(predict(p))), actualLogs)),
+  };
+}
+
+/** Ranks with average ranks for ties, then the Pearson correlation of the ranks. */
+export function spearmanOf(xs: number[], ys: number[]): number {
+  const rank = (v: number[]): number[] => {
+    const order = v.map((x, i) => [x, i] as const).sort((a, b) => a[0] - b[0]);
+    const r = new Array<number>(v.length).fill(0);
+    let i = 0;
+    while (i < order.length) {
+      let j = i;
+      while (j + 1 < order.length && order[j + 1]![0] === order[i]![0]) j++;
+      const avg = (i + j) / 2 + 1;
+      for (let k = i; k <= j; k++) r[order[k]![1]] = avg;
+      i = j + 1;
+    }
+    return r;
+  };
+  const rx = rank(xs);
+  const ry = rank(ys);
+  const mx = rx.reduce((a, b) => a + b, 0) / rx.length;
+  const my = ry.reduce((a, b) => a + b, 0) / ry.length;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < rx.length; i++) {
+    sxy += (rx[i]! - mx) * (ry[i]! - my);
+    sxx += (rx[i]! - mx) ** 2;
+    syy += (ry[i]! - my) ** 2;
+  }
+  return sxx === 0 || syy === 0 ? 0 : sxy / Math.sqrt(sxx * syy);
+}
+
+/** Kendall's tau-a on two equal-length lists: concordant minus discordant over all pairs. */
+export function kendallOf(xs: number[], ys: number[]): number {
+  let conc = 0;
+  let disc = 0;
+  for (let i = 0; i < xs.length; i++) {
+    for (let j = i + 1; j < xs.length; j++) {
+      const dx = Math.sign(xs[i]! - xs[j]!);
+      const dy = Math.sign(ys[i]! - ys[j]!);
+      if (dx * dy > 0) conc++;
+      else if (dx * dy < 0) disc++;
+    }
+  }
+  const pairs = (xs.length * (xs.length - 1)) / 2;
+  return pairs === 0 ? 0 : (conc - disc) / pairs;
+}
+
+/** The pinball loss of one scored protocol under one model's log prediction and sigma. */
+function pinballOf(actualLog: number, predLog: number, sigma: number): number {
+  const z10 = -1.2815515655446004;
+  const z90 = 1.2815515655446004;
+  return (
+    (pinballLoss(actualLog, predLog + z10 * sigma, 0.1) +
+      pinballLoss(actualLog, predLog, 0.5) +
+      pinballLoss(actualLog, predLog + z90 * sigma, 0.9)) /
+    3
+  );
+}
+
+/**
+ * The paired bootstrap for one scored set: resample protocols with replacement (fixed seed,
+ * `model.bootstrap_b` resamples) and report the 95% interval of the pinball delta and the
+ * Spearman delta, radar-5 minus radar-4. A pinball interval below zero favours radar-5; a
+ * Spearman interval above zero favours radar-5.
+ */
+export function bootstrapDelta(
+  scored: SnapshotProtocol[],
+  predV3: (p: SnapshotProtocol) => number,
+  sigmaV3: number,
+  predV2: (p: SnapshotProtocol) => number,
+  sigmaV2: number,
+  model: ModelConstants = MODEL,
+): BootstrapDelta {
+  const n = scored.length;
+  const actuals = scored.map((p) => Math.log10(p.mcap_usd!));
+  const p3 = scored.map((p) => Math.log10(predV3(p)));
+  const p2 = scored.map((p) => Math.log10(predV2(p)));
+  const dPin = scored.map((_, i) => pinballOf(actuals[i]!, p3[i]!, sigmaV3) - pinballOf(actuals[i]!, p2[i]!, sigmaV2));
+  const meanPin = dPin.reduce((a, b) => a + b, 0) / n;
+  const sp = spearmanOf(p3, actuals) - spearmanOf(p2, actuals);
+  const rng = mulberry32(seedHash(model.bootstrap_seed));
+  const pinBoots: number[] = [];
+  const spBoots: number[] = [];
+  for (let b = 0; b < model.bootstrap_b; b++) {
+    const idx: number[] = [];
+    for (let i = 0; i < n; i++) idx.push(Math.floor(rng() * n));
+    pinBoots.push(idx.reduce((s, i) => s + dPin[i]!, 0) / n);
+    spBoots.push(spearmanOf(idx.map((i) => p3[i]!), idx.map((i) => actuals[i]!)) - spearmanOf(idx.map((i) => p2[i]!), idx.map((i) => actuals[i]!)));
+  }
+  pinBoots.sort((a, b) => a - b);
+  spBoots.sort((a, b) => a - b);
+  const lo = Math.floor(0.025 * model.bootstrap_b);
+  const hi = Math.min(model.bootstrap_b - 1, Math.ceil(0.975 * model.bootstrap_b) - 1);
+  const round4 = (x: number): number => Math.round(x * 1e4) / 1e4;
+  return {
+    pinball_delta: round4(meanPin),
+    pinball_ci_low: round4(pinBoots[lo]!),
+    pinball_ci_high: round4(pinBoots[hi]!),
+    spearman_delta: round4(sp),
+    spearman_ci_low: round4(spBoots[lo]!),
+    spearman_ci_high: round4(spBoots[hi]!),
+    b: model.bootstrap_b,
   };
 }
 
@@ -598,32 +886,74 @@ function medianBaselinePredict(train: SnapshotProtocol[], asOf: string, model: M
   };
 }
 
-/** The whole validation: the blind test, the leave-one-out test, and every blind prediction. */
+/** The whole validation: the blind test, the leave-one-out test, the time split, the paired bootstrap against radar-4, and every blind prediction. */
 export function validate(
   snapshot: Snapshot,
-  fit: CurveFit,
+  fit: RidgeFit,
   train: SnapshotProtocol[],
   blindSet: Set<string>,
   model: ModelConstants = MODEL,
 ): Validation {
   const comps = snapshot.protocols.filter(isComparable);
   const blindComps = comps.filter((p) => blindSet.has(p.slug));
-  const predict = (p: SnapshotProtocol): number => impliedValue(p, snapshot.as_of, model, fit).implied;
+  const predict = (p: SnapshotProtocol): number => impliedValue(p, fit).implied;
   const blind = metricSet(blindComps, predict, fit.sigma_log);
+  // radar-4, re-fitted by this program on the same train set: the version radar-5 must beat.
+  const fitV2 = fitCurveV2(train, snapshot.as_of, model);
+  const predictV2 = (p: SnapshotProtocol): number => impliedValueV2(p, snapshot.as_of, model, fitV2).implied;
+  const v2Blind = metricSet(blindComps, predictV2, fitV2.sigma_log);
   // The median-multiple baseline on the same blind set, fitted on the train set alone.
   const baseline = metricSet(blindComps, medianBaselinePredict(train, snapshot.as_of, model), fit.sigma_log);
   // Leave-one-out: refit without each comparable in turn, predict it, score the same way.
   const looPred = new Map<string, number>();
+  const looPredV2 = new Map<string, number>();
   for (const held of comps) {
     const rest = comps.filter((p) => p.slug !== held.slug);
-    const refit = fitCurve(rest, snapshot.as_of, model);
-    looPred.set(held.slug, impliedValue(held, snapshot.as_of, model, refit).implied);
+    const refit = fitRidge(rest, model);
+    looPred.set(held.slug, impliedValue(held, refit).implied);
+    const refitV2 = fitCurveV2(rest, snapshot.as_of, model);
+    looPredV2.set(held.slug, impliedValueV2(held, snapshot.as_of, model, refitV2).implied);
   }
   const loo = metricSet(
     comps,
     (p) => looPred.get(p.slug)!,
     fit.sigma_log,
   );
+  const v2Loo = metricSet(
+    comps,
+    (p) => looPredV2.get(p.slug)!,
+    fitV2.sigma_log,
+  );
+  // Time split by listed_at: train on comparables listed on or before the cutoff, test after.
+  const dated = comps.filter((p) => p.listed_at !== null);
+  const tsTrain = dated.filter((p) => p.listed_at! <= model.time_split_cutoff);
+  const tsTest = dated.filter((p) => p.listed_at! > model.time_split_cutoff);
+  const tsFit = fitRidge(tsTrain, model);
+  const tsFitV2 = fitCurveV2(tsTrain, snapshot.as_of, model);
+  const timeSplit: TimeSplit = {
+    cutoff: model.time_split_cutoff,
+    train_n: tsTrain.length,
+    test_n: tsTest.length,
+    v3: metricSet(tsTest, (p) => impliedValue(p, tsFit).implied, tsFit.sigma_log),
+    v2: metricSet(tsTest, (p) => impliedValueV2(p, snapshot.as_of, model, tsFitV2).implied, tsFitV2.sigma_log),
+  };
+  // Paired bootstrap on the blind set and on leave-one-out.
+  const bootBlind = bootstrapDelta(blindComps, predict, fit.sigma_log, predictV2, fitV2.sigma_log, model);
+  const bootLoo = bootstrapDelta(
+    comps,
+    (p) => looPred.get(p.slug)!,
+    fit.sigma_log,
+    (p) => looPredV2.get(p.slug)!,
+    fitV2.sigma_log,
+    model,
+  );
+  // The submit gate: both intervals must exclude zero on BOTH splits (pinball below zero,
+  // Spearman above zero). Reported honestly whatever it says.
+  const gatePassed =
+    bootBlind.pinball_ci_high < 0 &&
+    bootBlind.spearman_ci_low > 0 &&
+    bootLoo.pinball_ci_high < 0 &&
+    bootLoo.spearman_ci_low > 0;
   const predictions: BlindPrediction[] = [...blindSet]
     .sort()
     .map((slug) => {
@@ -638,7 +968,13 @@ export function validate(
     total_comps_n: comps.length,
     blind,
     loo,
+    v2_blind: v2Blind,
+    v2_loo: v2Loo,
     baseline,
+    time_split: timeSplit,
+    bootstrap_blind: bootBlind,
+    bootstrap_loo: bootLoo,
+    gate_passed: gatePassed,
     predictions,
   };
 }
@@ -858,7 +1194,7 @@ const round4 = (n: number): number => Math.round(n * 1e4) / 1e4;
 export function buildBoard(
   snapshot: Snapshot,
   model: ModelConstants = MODEL,
-  fit: CurveFit,
+  fit: RidgeFit,
 ): BoardRow[] {
   const index = bySlug(snapshot.protocols);
   const chosen = new Map<string, SnapshotProtocol>();
@@ -885,8 +1221,9 @@ export function buildBoard(
   for (const p of above) chosen.set(p.slug, p);
 
   const scored = [...chosen.values()].map((p) => {
-    const v = impliedValue(p, snapshot.as_of, model, fit);
-    return { p, ...v };
+    const v = impliedValue(p, fit);
+    const age = ageDays(snapshot.as_of, p.listed_at);
+    return { p, ...v, age };
   });
   scored.sort((a, b) => b.implied - a.implied || (a.p.slug < b.p.slug ? -1 : a.p.slug > b.p.slug ? 1 : 0));
   return scored.map((s, i) => ({
@@ -908,12 +1245,12 @@ export function buildBoard(
     implied_value_usd: s.implied,
     farm_cost_usd: farmCostUsd(s.p, s.age),
     model: {
-      curve_value_usd: s.curveValue,
+      predicted_usd: s.implied,
+      p10_usd: s.p10,
+      p90_usd: s.p90,
       curve_multiple: round3(s.curveMultiple),
-      growth_pct: s.growthPct,
-      growth_multiplier: round4(s.growthMult),
-      maturity_multiplier: round4(s.maturityMult),
-      breadth_multiplier: round4(s.breadthMult),
+      category_shift: round4(s.categoryShift),
+      log_tvl: round4(s.logTvl),
       age_days: s.age,
     },
     farm_steps: farmSteps(s.p, s.age).map(stepText),
@@ -954,11 +1291,12 @@ export function radarRow(row: BoardRow): RadarRow {
     above_floor: row.above_floor,
     implied_value_usd: row.implied_value_usd,
     farm_cost_usd: row.farm_cost_usd,
-    curve_value_usd: row.model.curve_value_usd,
+    predicted_usd: row.model.predicted_usd,
+    p10_usd: row.model.p10_usd,
+    p90_usd: row.model.p90_usd,
     curve_multiple: row.model.curve_multiple,
-    growth_multiplier: row.model.growth_multiplier,
-    maturity_multiplier: row.model.maturity_multiplier,
-    breadth_multiplier: row.model.breadth_multiplier,
+    category_shift: row.model.category_shift,
+    log_tvl: row.model.log_tvl,
   };
 }
 
@@ -971,7 +1309,7 @@ export function buildRadar(
   const blind = new Set(blindSlugs(snapshot, model));
   const comps = snapshot.protocols.filter(isComparable);
   const train = comps.filter((p) => !blind.has(p.slug));
-  const fit = fitCurve(train, snapshot.as_of, model);
+  const fit = fitRidge(train, model);
   const validation = validate(snapshot, fit, train, blind, model);
   const board = buildBoard(snapshot, model, fit);
   const live = liveRows(snapshot);
@@ -985,7 +1323,7 @@ export function buildRadar(
     snapshot_bytes: manifest.snapshot_bytes,
     model,
     model_version: MODEL_VERSION,
-    curve: fit,
+    ridge: fit,
     validation,
     watchlist_size: snapshot.watchlist.length,
     board_size: board.length,
@@ -1101,15 +1439,14 @@ export function validationScript(validation: Validation, snapshotSha256: string)
 
 /**
  * One board row as a single readable line for the run log: its rank, name and implied value,
- * then the curve value and the three multipliers that produced it, so a run's top rows can be
- * read at a glance without opening the board. The multipliers are shown to two decimals; the
- * value is a plain dollar figure.
+ * then the ridge prediction and its 80% band, so a run's top rows can be read at a glance
+ * without opening the board. The value is a plain dollar figure.
  */
 export function describeRow(row: BoardRow): string {
   const m = row.model;
   const money = `$${row.implied_value_usd.toLocaleString('en-US')}`;
-  const mults = `curve $${m.curve_value_usd.toLocaleString('en-US')} (x${m.curve_multiple}) x growth ${m.growth_multiplier.toFixed(2)} x maturity ${m.maturity_multiplier.toFixed(2)} x breadth ${m.breadth_multiplier.toFixed(2)}`;
+  const band = `80% band $${m.p10_usd.toLocaleString('en-US')}..$${m.p90_usd.toLocaleString('en-US')} (x${m.curve_multiple}, category shift ${m.category_shift >= 0 ? '+' : ''}${m.category_shift})`;
   const age = m.age_days === null ? 'age unknown' : `${m.age_days} days old`;
   const list = row.is_watchlist ? 'watchlist' : row.above_floor ? 'above the floor' : 'early';
-  return `#${row.rank} ${row.name} (${row.slug}) ${money} [${mults}] ${age}, ${list}, farm $${row.farm_cost_usd}`;
+  return `#${row.rank} ${row.name} (${row.slug}) ${money} [${band}] ${age}, ${list}, farm $${row.farm_cost_usd}`;
 }

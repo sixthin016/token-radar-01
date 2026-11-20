@@ -154,3 +154,13 @@ tbody tr[data-selected="true"] { background: var(--surface-2); box-shadow: inset
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* radar-5: the 80% band under each implied value, and the validation table. */
+.implied { flex-wrap: wrap; }
+.implied .band { display: block; width: 100%; color: var(--muted); font-size: 12px; font-family: var(--font-num); }
+table.valid { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: var(--step-3); }
+table.valid th, table.valid td { text-align: left; padding: var(--step-2) var(--step-3); border-bottom: 1px solid var(--border); }
+table.valid th { color: var(--muted); font-weight: 600; }
+table.valid td.num { font-family: var(--font-num); text-align: right; }
+table.valid th:nth-child(n+2) { text-align: right; }
+.model h3 { margin-top: var(--step-5); }
