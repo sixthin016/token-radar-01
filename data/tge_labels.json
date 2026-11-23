@@ -1,0 +1,500 @@
+{
+ "source": "TGE-day market caps (CoinMarketCap, median of first 7 tracked days); TVL 30 days pre-TGE (DefiLlama history). 90 labelled, 55 usable as snapshot comparables (31 not comparables in the snapshot, 4 without tvl_pre30).",
+ "rows": [
+  {
+   "slug": "enzyme-finance",
+   "tge_date": "2017-03-15",
+   "mc_tge": 17699562.72,
+   "tvl_pre30": 14844147,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 3
+  },
+  {
+   "slug": "reserve-protocol",
+   "tge_date": "2019-06-20",
+   "mc_tge": 10528903.6857158,
+   "tvl_pre30": 9999965,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 4
+  },
+  {
+   "slug": "thorchain-dex",
+   "tge_date": "2019-09-05",
+   "mc_tge": 1485569.19051312,
+   "tvl_pre30": 2314924,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 13
+  },
+  {
+   "slug": "team-finance",
+   "tge_date": "2020-07-20",
+   "mc_tge": 19663258.6008522,
+   "tvl_pre30": 131699505,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -709,
+   "chains_now": 22
+  },
+  {
+   "slug": "serum",
+   "tge_date": "2020-08-14",
+   "mc_tge": 83811885.465,
+   "tvl_pre30": 286479897,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 1
+  },
+  {
+   "slug": "harvest-finance",
+   "tge_date": "2020-09-14",
+   "mc_tge": 12429616.2573088,
+   "tvl_pre30": 1031493201,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 5
+  },
+  {
+   "slug": "aave-v2",
+   "tge_date": "2020-10-05",
+   "mc_tge": 220265142.10956782,
+   "tvl_pre30": 11338,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 3
+  },
+  {
+   "slug": "hegic",
+   "tge_date": "2020-11-11",
+   "mc_tge": 50509386.89848956,
+   "tvl_pre30": 6635746,
+   "growth7_pre_pct": 426.9476208627152,
+   "age_tge_days": null,
+   "chains_now": 2
+  },
+  {
+   "slug": "beefy",
+   "tge_date": "2020-12-23",
+   "mc_tge": 5617116.70955815,
+   "tvl_pre30": 544456023,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 42
+  },
+  {
+   "slug": "badger-dao",
+   "tge_date": "2021-01-21",
+   "mc_tge": 29788179.07490236,
+   "tvl_pre30": 274167542,
+   "growth7_pre_pct": 27.470200475874407,
+   "age_tge_days": null,
+   "chains_now": 5
+  },
+  {
+   "slug": "tornado-cash",
+   "tge_date": "2021-02-09",
+   "mc_tge": 68310932.23,
+   "tvl_pre30": 104804017,
+   "growth7_pre_pct": 83.95289294416924,
+   "age_tge_days": null,
+   "chains_now": 8
+  },
+  {
+   "slug": "convex-finance",
+   "tge_date": "2021-08-19",
+   "mc_tge": 146642920.32,
+   "tvl_pre30": 3585291970,
+   "growth7_pre_pct": -8.182669283256539,
+   "age_tge_days": null,
+   "chains_now": 4
+  },
+  {
+   "slug": "benqi-lending",
+   "tge_date": "2021-08-23",
+   "mc_tge": 85724831.14,
+   "tvl_pre30": 105,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 1
+  },
+  {
+   "slug": "ssv-network",
+   "tge_date": "2021-10-22",
+   "mc_tge": 129792877.69,
+   "tvl_pre30": 13599530018,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": null,
+   "chains_now": 1
+  },
+  {
+   "slug": "flokifi-locker",
+   "tge_date": "2022-01-21",
+   "mc_tge": 416298738.45,
+   "tvl_pre30": 3464681,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -348,
+   "chains_now": 15
+  },
+  {
+   "slug": "osmosis-dex",
+   "tge_date": "2022-01-28",
+   "mc_tge": 2168302066.4,
+   "tvl_pre30": 727470185,
+   "growth7_pre_pct": 12.69085596308679,
+   "age_tge_days": null,
+   "chains_now": 1
+  },
+  {
+   "slug": "astar-dapps-staking",
+   "tge_date": "2022-02-04",
+   "mc_tge": 197963724.3,
+   "tvl_pre30": 238574076,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": 6,
+   "chains_now": 1
+  },
+  {
+   "slug": "synapse-cross-chain-bridge",
+   "tge_date": "2022-08-24",
+   "mc_tge": 174008303.41,
+   "tvl_pre30": 222925717,
+   "growth7_pre_pct": 3.555511842322656,
+   "age_tge_days": null,
+   "chains_now": 19
+  },
+  {
+   "slug": "across",
+   "tge_date": "2022-12-13",
+   "mc_tge": 7416641.63,
+   "tvl_pre30": 38915389,
+   "growth7_pre_pct": -2.7275677240823026,
+   "age_tge_days": 340,
+   "chains_now": 1
+  },
+  {
+   "slug": "gearbox",
+   "tge_date": "2022-12-17",
+   "mc_tge": 276984142.19,
+   "tvl_pre30": 94559963,
+   "growth7_pre_pct": -7.449877668578509,
+   "age_tge_days": 355,
+   "chains_now": 11
+  },
+  {
+   "slug": "blur-bids",
+   "tge_date": "2023-02-14",
+   "mc_tge": 349556584.98,
+   "tvl_pre30": 29467119,
+   "growth7_pre_pct": 1.036037801390366,
+   "age_tge_days": 39,
+   "chains_now": 2
+  },
+  {
+   "slug": "quickswap-dex",
+   "tge_date": "2023-04-04",
+   "mc_tge": 42514312.47,
+   "tvl_pre30": 109522865,
+   "growth7_pre_pct": -6.842840404193851,
+   "age_tge_days": null,
+   "chains_now": 2
+  },
+  {
+   "slug": "brickken",
+   "tge_date": "2023-12-15",
+   "mc_tge": 5815632.59,
+   "tvl_pre30": 5001216,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -40,
+   "chains_now": 5
+  },
+  {
+   "slug": "exactly",
+   "tge_date": "2024-07-08",
+   "mc_tge": 1206493.14,
+   "tvl_pre30": 10686558,
+   "growth7_pre_pct": -9.260745493671852,
+   "age_tge_days": 562,
+   "chains_now": 3
+  },
+  {
+   "slug": "eigencloud",
+   "tge_date": "2024-10-01",
+   "mc_tge": 628319604.15,
+   "tvl_pre30": 11826894184,
+   "growth7_pre_pct": -7.841690018351343,
+   "age_tge_days": 475,
+   "chains_now": 1
+  },
+  {
+   "slug": "usual-usd0",
+   "tge_date": "2024-11-19",
+   "mc_tge": 115591806.04,
+   "tvl_pre30": 333422437,
+   "growth7_pre_pct": 8.093463392379597,
+   "age_tge_days": 127,
+   "chains_now": 1
+  },
+  {
+   "slug": "mansory",
+   "tge_date": "2025-02-26",
+   "mc_tge": 15486343.44,
+   "tvl_pre30": 28866330,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -194,
+   "chains_now": 2
+  },
+  {
+   "slug": "streamflow",
+   "tge_date": "2025-03-10",
+   "mc_tge": 1320635.29,
+   "tvl_pre30": 931282,
+   "growth7_pre_pct": 95.27538912198814,
+   "age_tge_days": 741,
+   "chains_now": 6
+  },
+  {
+   "slug": "babylon-protocol",
+   "tge_date": "2025-04-10",
+   "mc_tge": 236646262.46,
+   "tvl_pre30": 4197567998,
+   "growth7_pre_pct": -10.591669691640327,
+   "age_tge_days": 170,
+   "chains_now": 1
+  },
+  {
+   "slug": "hyperlane",
+   "tge_date": "2025-04-22",
+   "mc_tge": 37773327.28,
+   "tvl_pre30": 108444289,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -310,
+   "chains_now": 27
+  },
+  {
+   "slug": "dolomite",
+   "tge_date": "2025-04-24",
+   "mc_tge": 22035695.83,
+   "tvl_pre30": 713328368,
+   "growth7_pre_pct": 4.712506314171394,
+   "age_tge_days": 920,
+   "chains_now": 7
+  },
+  {
+   "slug": "obol",
+   "tge_date": "2025-05-07",
+   "mc_tge": 27127359.78,
+   "tvl_pre30": 705069251,
+   "growth7_pre_pct": -4.723156145376873,
+   "age_tge_days": -181,
+   "chains_now": 1
+  },
+  {
+   "slug": "huma",
+   "tge_date": "2025-05-26",
+   "mc_tge": 89153783.15,
+   "tvl_pre30": 167592451,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -366,
+   "chains_now": 4
+  },
+  {
+   "slug": "resolv-usr",
+   "tge_date": "2025-06-10",
+   "mc_tge": 42045374.36,
+   "tvl_pre30": 352439638,
+   "growth7_pre_pct": 5.867437185188495,
+   "age_tge_days": 138,
+   "chains_now": 1
+  },
+  {
+   "slug": "zyfai",
+   "tge_date": "2025-06-11",
+   "mc_tge": 1356746.89,
+   "tvl_pre30": 91576,
+   "growth7_pre_pct": 64.0147580327399,
+   "age_tge_days": 48,
+   "chains_now": 5
+  },
+  {
+   "slug": "treehouse-protocol",
+   "tge_date": "2025-07-29",
+   "mc_tge": 76423159.94,
+   "tvl_pre30": 319265206,
+   "growth7_pre_pct": 26.78834776659411,
+   "age_tge_days": 322,
+   "chains_now": 3
+  },
+  {
+   "slug": "reservoir-protocol",
+   "tge_date": "2025-08-18",
+   "mc_tge": 13419272.78,
+   "tvl_pre30": 33591986,
+   "growth7_pre_pct": -35.469642768845254,
+   "age_tge_days": 280,
+   "chains_now": 17
+  },
+  {
+   "slug": "veranta",
+   "tge_date": "2025-09-09",
+   "mc_tge": 92608270.96,
+   "tvl_pre30": 22649522,
+   "growth7_pre_pct": 4.68280325665138,
+   "age_tge_days": 581,
+   "chains_now": 1
+  },
+  {
+   "slug": "falcon-finance",
+   "tge_date": "2025-09-29",
+   "mc_tge": 449587899.8,
+   "tvl_pre30": 1738886874,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -1,
+   "chains_now": 1
+  },
+  {
+   "slug": "evaa-protocol",
+   "tge_date": "2025-10-03",
+   "mc_tge": 24397091.31,
+   "tvl_pre30": 15255084,
+   "growth7_pre_pct": -5.214526832964184,
+   "age_tge_days": 582,
+   "chains_now": 1
+  },
+  {
+   "slug": "yield-basis",
+   "tge_date": "2025-10-15",
+   "mc_tge": 41531846.75,
+   "tvl_pre30": 3101524,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": 20,
+   "chains_now": 1
+  },
+  {
+   "slug": "zerobase-cedefi",
+   "tge_date": "2025-10-17",
+   "mc_tge": 69354448.45,
+   "tvl_pre30": 45180040,
+   "growth7_pre_pct": 0.5190856161988,
+   "age_tge_days": 135,
+   "chains_now": 7
+  },
+  {
+   "slug": "rain",
+   "tge_date": "2025-10-23",
+   "mc_tge": 38759388.37,
+   "tvl_pre30": 92728,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -5,
+   "chains_now": 1
+  },
+  {
+   "slug": "superfluid",
+   "tge_date": "2025-11-18",
+   "mc_tge": 3753663.48,
+   "tvl_pre30": 19403437,
+   "growth7_pre_pct": -0.533757169015503,
+   "age_tge_days": 1489,
+   "chains_now": 10
+  },
+  {
+   "slug": "zama",
+   "tge_date": "2026-02-02",
+   "mc_tge": 63050134.31,
+   "tvl_pre30": 27749841,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -91,
+   "chains_now": 1
+  },
+  {
+   "slug": "bitway-earn",
+   "tge_date": "2026-03-02",
+   "mc_tge": 27233221.13,
+   "tvl_pre30": 10552003,
+   "growth7_pre_pct": 0.0,
+   "age_tge_days": -10,
+   "chains_now": 1
+  },
+  {
+   "slug": "usd-ai",
+   "tge_date": "2026-04-22",
+   "mc_tge": 149231057.75,
+   "tvl_pre30": 333351555,
+   "growth7_pre_pct": -0.25822661133048097,
+   "age_tge_days": 338,
+   "chains_now": 1
+  },
+  {
+   "slug": "kaio",
+   "tge_date": "2026-05-11",
+   "mc_tge": 56553916.86,
+   "tvl_pre30": 89380442,
+   "growth7_pre_pct": -0.03932870422354018,
+   "age_tge_days": 467,
+   "chains_now": 14
+  },
+  {
+   "slug": "solstice",
+   "tge_date": "2026-05-25",
+   "mc_tge": 48761070.84,
+   "tvl_pre30": 378555399,
+   "growth7_pre_pct": 0.06766703564689003,
+   "age_tge_days": 237,
+   "chains_now": 1
+  },
+  {
+   "slug": "concentrator",
+   "tge_date": "2026-05-26",
+   "mc_tge": 20655069.17,
+   "tvl_pre30": 41955512,
+   "growth7_pre_pct": 8.846320651406469,
+   "age_tge_days": 1534,
+   "chains_now": 1
+  },
+  {
+   "slug": "re",
+   "tge_date": "2026-06-18",
+   "mc_tge": 139677418.23,
+   "tvl_pre30": 268365156,
+   "growth7_pre_pct": 2.1441691573598654,
+   "age_tge_days": 178,
+   "chains_now": 4
+  },
+  {
+   "slug": "cap",
+   "tge_date": "2026-06-26",
+   "mc_tge": 42935619.61,
+   "tvl_pre30": 300046206,
+   "growth7_pre_pct": -8.224642647458625,
+   "age_tge_days": 316,
+   "chains_now": 1
+  },
+  {
+   "slug": "flying-tulip-lend",
+   "tge_date": "2026-07-16",
+   "mc_tge": 1928677.83,
+   "tvl_pre30": 5051077,
+   "growth7_pre_pct": 27.543849947490905,
+   "age_tge_days": 171,
+   "chains_now": 3
+  },
+  {
+   "slug": "grove-finance",
+   "tge_date": "2026-07-29",
+   "mc_tge": 5888568.16,
+   "tvl_pre30": 2625419804,
+   "growth7_pre_pct": -0.6407184178799152,
+   "age_tge_days": 125,
+   "chains_now": 5
+  },
+  {
+   "slug": "concrete",
+   "tge_date": "2026-10-04",
+   "mc_tge": 70066516.86,
+   "tvl_pre30": 1183085909,
+   "growth7_pre_pct": -0.6792360231733907,
+   "age_tge_days": 604,
+   "chains_now": 5
+  }
+ ]
+}
