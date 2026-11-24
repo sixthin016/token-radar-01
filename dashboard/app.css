@@ -1,4 +1,4 @@
-/* Launch Radar v6. One palette, two radii, two families: everything else is spacing, a hairline and a type step. */
+/* Launch Radar v7. One palette, two radii, two families: everything else is spacing, a hairline and a type step. */
 :root {
   --canvas: #0b100e;
   --surface: #121c17;
@@ -86,6 +86,18 @@ ol.steps li { margin-bottom: 8px; }
 ol.steps .meta { font-size: 12px; color: var(--muted); }
 .note { background: var(--surface-2); border-left: 3px solid var(--warn); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; padding: 10px 12px; margin-top: 12px; font-size: 13px; }
 .note.good { border-left-color: var(--accent-2); }
+/* v7: the three evidence tables sit side by side, like the winners'; the odds bar, the
+   scatter and the per-row equation block are new. */
+.evidence-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: start; }
+.evidence-grid section.card { margin-top: 16px; }
+.evidence-grid h2 { margin-top: 0; }
+.scatter svg { display: block; }
+.oddsbar { display: inline-block; width: 56px; height: 8px; background: var(--surface-3); border-radius: 4px; overflow: hidden; vertical-align: middle; margin-right: 6px; }
+.oddsbar i { display: block; height: 100%; background: var(--info); }
+.eq { background: var(--surface-2); border: 1px solid var(--line-2); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 12px; font-size: 13px; }
+.eq b { color: var(--accent); }
+.eqline { font-family: var(--mono); margin-top: 4px; }
+@media (max-width: 1100px) { .evidence-grid { grid-template-columns: 1fr; } }
 footer { margin-top: 28px; color: var(--faint); font-size: 12px; }
 @media (max-width: 900px) { .kpis { grid-template-columns: repeat(3, 1fr); } .cols { grid-template-columns: 1fr; } th:nth-child(5), td:nth-child(5), th:nth-child(6), td:nth-child(6) { display: none; } }
 @media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, 1fr); } h1 { font-size: 21px; } }

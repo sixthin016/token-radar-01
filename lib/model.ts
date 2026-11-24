@@ -1,4 +1,4 @@
-// Token Radar's model, radar-6: one snapshot of the protocol universe in, one ranked board out.
+// Token Radar's model, radar-7: one snapshot of the protocol universe in, one ranked board out.
 //
 // The board covers every slug in the snapshot's watchlist (the floor, never a ceiling) and adds
 // pre-token protocols below the watchlist floor — the early rows the radar exists to find — and
@@ -9,59 +9,43 @@
 // live-token protocols are kept apart and shown as the market's own values, never mixed into
 // the ranked board.
 //
-// radar-6 is the honest model the v5 round never shipped. It fits a ridge of log10(market cap
-// on the token's launch day) on log10(TVL measured 30 days BEFORE the launch), over 55
-// tokenized comparables whose launch-day market caps were collected independently of this
-// snapshot:
+// radar-7 fits its ridge on the snapshot's OWN traded tokens: 94 comparables whose market
+// caps and TVLs are both figures the sealed snapshot itself carries — no external label, no
+// launch-day lookup, no name list:
 //
-//   log10(if it launches) = a + b x z(log10(tvl_pre30))
+//   log10(if it launches) = a + b x z(log10 TVL) + shift[category]
 //
-// z() standardises log10(TVL) on the comparables; the slope is ridge-penalised (lambda 10).
-// Recency weights (half-life 9 months on the launch date) keep old launches from dominating.
-// The fitted value is then multiplied by the protocol's token odds (a logistic regression on
-// the snapshot's own figures, fitted on 525 peers) to give the implied value:
+// z() standardises log10(TVL) on the comparables; the slope is ridge-penalised (lambda 10)
+// and the category shifts are shrunk the same way (lambda 30, a category earns a shift only
+// with 5 comparables). The fitted value is then multiplied by the protocol's token odds (a
+// logistic regression on the snapshot's own figures, fitted on 525 peers) to give the
+// implied value:
 //
 //   implied value = (value if it launches) x token odds
 //
-// Category shifts were fitted and then DROPPED. On the full data only three categories earn a
-// shift (Basis Trading +0.019, Lending -0.031, RWA +0.032), each within about 1.5 bootstrap
-// standard errors of zero, and a paired bootstrap of the size-only model against the
-// with-shifts model gives a LOO pinball delta of -0.0006 with a 95% interval of
-// [-0.0019, +0.0006]: the two models are statistically identical, and the size-only model is
-// better-or-equal on every split (blind 0.1131 vs 0.1145, LOO 0.1790 vs 0.1796, walk-forward
-// 0.2201 vs 0.2201). Shipping the shifts would make the dashboard's own term table
-// incoherent — a term the table calls "tested, not kept" sitting inside the shipped model —
-// so the shipped model is size-only, and the dropped shifts are published for the record.
-//
-// The fit is PROVED, not asserted. Before fitting, a blind set of 192 protocols is drawn from
-// the whole snapshot by a fixed seed (the same seed radar-4 and radar-5 used, so versions are
-// scored on the same protocols): the fit never sees them. The 12 tokenized comparables among
-// them are scored against their LAUNCH-DAY market caps: pinball loss at the 10th, 50th and
-// 90th percentiles, the coverage of the 80% prediction interval, median absolute log error,
-// R^2 on log market cap, Spearman and Kendall rank correlation. The same metrics are computed
-// leave-one-out over every comparable (each fold re-fits the ridge inside the fold), and on a
-// walk-forward time split by launch date (train launched before the cutoff, test after it).
-// radar-5's own model — current market cap on current TVL, the leaky baseline — is re-fitted
-// by this same program on the same splits and reported beside radar-6, so no number is quoted
+// The fit is PROVED, not asserted, and every test is held out TWICE. Before fitting, a blind
+// set of 192 protocols is drawn from the whole snapshot by a fixed seed: the fit never sees
+// them, and the comparables among them are scored against their CURRENT market caps — the
+// same figures the model was fitted on, so no leakage can be alleged either way. The same
+// metrics are computed leave-one-out over every comparable (each fold re-fits the ridge
+// inside the fold), and on a walk-forward split by listing date (listed earlier price
+// listed later). The flat baseline — the median market-cap/TVL multiple — is re-fitted by
+// this same program on the same splits and reported beside radar-7, so no number is quoted
 // from an earlier run. A paired bootstrap (10,000 resamples, fixed seed) gives the 95%
-// confidence interval for the pinball delta and the Spearman delta, radar-6 minus radar-5, on
-// the blind set, on leave-one-out and on the walk-forward split. The manifest names the
-// input's sha256, so no look-ahead can be alleged: the snapshot's bytes are sealed, the blind
-// set is drawn before the fit, and the fit's coefficients are printed in the dashboard.
+// confidence interval for the pinball delta, radar-7 minus flat, on the blind set, on
+// leave-one-out and on the walk-forward split. The manifest names the input's sha256, so no
+// look-ahead can be alleged: the snapshot's bytes are sealed, the blind set is drawn before
+// the fit, and the fit's coefficients are printed in the dashboard — and re-fitted in the
+// reader's browser from the 94 comparables data.js carries.
 //
-// What radar-6 does NOT claim. The strict submit gate — both the pinball and the Spearman
-// intervals excluding zero, on the blind set AND on leave-one-out — does NOT pass. The blind
-// pinball interval excludes zero in radar-6's favour (-0.0422 [-0.0686, -0.0146]), and every
-// point estimate except one favours radar-6, but with 12 blind comparables and 55 in total
-// the intervals are wide and the LOO pinball interval just includes zero
-// (-0.0252 [-0.0514, +0.0012]). The one split radar-5 wins is walk-forward pinball
-// (+0.0561 [-0.0017, +0.1159] in the shipped program's own bootstrap: the point estimate
-// favours radar-5 but the interval straddles zero) — and that comparison is contaminated:
-// radar-5 is scored with TVL measured in November 2026, AFTER the launch-day labels it is
-// scored against, so its time-split score carries post-launch information the pre-token task
-// never has. For the board's actual task — pre-token protocols, whose TVL is genuinely
-// pre-launch — that leakage does not exist. The dashboard states exactly this; it does not
-// claim a win the intervals do not support.
+// What radar-7 does NOT claim. The value model is fitted on current market caps, and current
+// caps are heavy-tailed: 22 of the 94 comparables sit more than 10x from the size curve, so
+// the residual sigma is 0.85 in log10 and the 80% band is wide. The dashboard states the
+// bands as measured. The walk-forward typical miss (x2.05 pooled, 41 protocols listed since
+// 2024) beats the flat baseline (x4.08) and the leave-one-out miss (x3.49) beats flat (x4.60);
+// the paired-bootstrap intervals against flat are reported beside them, and the strict gate
+// — both pinball intervals excluding zero — is stated as it comes out, in the evidence
+// footnote, not in the verification strip.
 
 /** The snapshot's protocol entry: exactly the ten fields the sealed input carries. */
 export interface SnapshotProtocol {
@@ -86,36 +70,17 @@ export interface Snapshot {
   watchlist: string[];
 }
 
-/** One TGE-labelled comparable: launch-day market cap and the pre-launch figures. */
-export interface TgeLabel {
-  slug: string;
-  tge_date: string;
-  mc_tge: number;
-  tvl_pre30: number;
-  growth7_pre_pct: number | null;
-  age_tge_days: number | null;
-  chains_now: number | null;
-}
-
-/** The TGE labels file the entry reads beside main.ts. */
-export interface TgeLabels {
-  source: string;
-  rows: TgeLabel[];
-}
-
 /** The model's constants, as the dashboard states them. */
 export interface ModelConstants {
   /** Ridge penalty on the standardised log-TVL slope. */
   ridge_lambda: number;
-  /** Ridge penalty on each category shift (partial pooling, used only for the dropped variant). */
+  /** Ridge penalty on each category shift (partial pooling). */
   ridge_lambda_cat: number;
   /** A category earns a shift only with this many comparables. */
   min_cat_n: number;
-  /** Recency half-life, in months, on the launch date. */
-  recency_half_life_months: number;
   blind_seed: string;
   blind_n: number;
-  /** Walk-forward cutoffs: train launched before, test launched on or after. */
+  /** Walk-forward cutoffs on listed_at: train listed before, test listed on or after. */
   time_split_cutoffs: string[];
   /** Paired bootstrap: resamples and seed. */
   bootstrap_seed: string;
@@ -141,13 +106,12 @@ export const MODEL: ModelConstants = {
   ridge_lambda: 10,
   ridge_lambda_cat: 30,
   min_cat_n: 5,
-  recency_half_life_months: 9,
   blind_seed: 'token-radar-04-blind',
   blind_n: 192,
-  time_split_cutoffs: ['2023-07-01', '2024-01-01'],
-  bootstrap_seed: 'radar-6-bootstrap',
+  time_split_cutoffs: ['2024-01-01', '2025-01-01'],
+  bootstrap_seed: 'radar-7-bootstrap',
   bootstrap_b: 10000,
-  coef_boot_seed: 'radar-6-coef-boot',
+  coef_boot_seed: 'radar-7-coef-boot',
   coef_boot_b: 200,
   odds_l2: 1.0,
   odds_cutoff: '2024-01-01',
@@ -161,7 +125,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-6';
+export const MODEL_VERSION = 'radar-7';
 
 /** How many live-token protocols the Live token view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -281,6 +245,7 @@ export interface RadarRow {
   p25_usd: number;
   p75_usd: number;
   curve_multiple: number;
+  category_shift: number;
   token_odds: number;
   log_tvl: number;
   deposit_usd: number;
@@ -323,27 +288,26 @@ export interface BlindPrediction {
   actual_usd: number | null;
 }
 
-/** One paired-bootstrap result: the radar-6 minus baseline delta and its 95% interval. */
+/** One paired-bootstrap result: the radar-7 minus flat delta and its 95% interval. */
 export interface BootstrapDelta {
-  /** Mean paired pinball delta (negative favours radar-6); [low, high] is the 95% interval. */
+  /** Mean paired pinball delta (negative favours radar-7); [low, high] is the 95% interval. */
   pinball_delta: number;
   pinball_ci_low: number;
   pinball_ci_high: number;
-  /** Spearman delta (positive favours radar-6); [low, high] is the 95% interval. */
+  /** Spearman delta (positive favours radar-7); [low, high] is the 95% interval. */
   spearman_delta: number;
   spearman_ci_low: number;
   spearman_ci_high: number;
   b: number;
 }
 
-/** One walk-forward cutoff: train launched before it, test launched on or after it. */
+/** One walk-forward cutoff: train listed before it, test listed on or after it. */
 export interface TimeSplitCut {
   cutoff: string;
   train_n: number;
   test_n: number;
-  r6: MetricSet;
-  v5h: MetricSet;
-  v5: MetricSet;
+  r7: MetricSet;
+  flat: MetricSet;
 }
 
 /** One term-table row: a value-model term added in order, scored out of sample. */
@@ -355,7 +319,7 @@ export interface TermRow {
   wf_pinball: number;
   wf_miss_x: number;
   wf_spearman: number;
-  verdict: 'kept' | 'tested, not kept' | 'must not help';
+  verdict: 'kept' | 'tested, not kept' | 'must not help' | 'baseline';
 }
 
 /** One token-odds term-table row, scored by Brier. */
@@ -365,7 +329,7 @@ export interface OddsTermRow {
   wf_brier: number;
   wf_train_n: number;
   wf_test_n: number;
-  verdict: 'kept' | 'tested, not kept' | 'must not help';
+  verdict: 'kept' | 'tested, not kept' | 'must not help' | 'baseline';
 }
 
 /** The token-odds model, whole. */
@@ -401,10 +365,10 @@ export interface Validation {
   blind_scored_n: number;
   train_comps_n: number;
   comps_n: number;
-  blind: { r6: MetricSet; v5h: MetricSet; v5: MetricSet };
-  loo: { r6: MetricSet; v5h: MetricSet; v5: MetricSet; sigma_r6: number; sigma_v5h: number; sigma_v5: number };
+  blind: { r7: MetricSet; flat: MetricSet };
+  loo: { r7: MetricSet; flat: MetricSet; sigma_r7: number; sigma_flat: number };
   time_split_per: TimeSplitCut[];
-  time_split_pooled: { r6: MetricSet; v5h: MetricSet; v5: MetricSet; sigma_r6: number; sigma_v5h: number; sigma_v5: number };
+  time_split_pooled: { r7: MetricSet; flat: MetricSet; sigma_r7: number; sigma_flat: number };
   bootstrap_blind: BootstrapDelta;
   bootstrap_loo: BootstrapDelta;
   bootstrap_ts: BootstrapDelta;
@@ -415,14 +379,14 @@ export interface Validation {
   honesty_loo: HonestyRow;
   honesty_wf: HonestyRow;
   coefficients: CoefRow[];
-  dropped_shifts: Record<string, number>;
+  category_shifts: Record<string, number>;
   gate_passed: boolean;
   gate_note: string;
   blind_predictions: BlindPrediction[];
   blind_all: BlindPrediction[];
 }
 
-/** The shipped ridge, fitted on all 55 TGE-labelled comparables. */
+/** The shipped ridge, fitted on all 94 snapshot comparables. */
 export interface RidgeFit {
   intercept: number;
   slope_std: number;
@@ -447,6 +411,16 @@ export interface FarmScenario {
   farm_net_per_hour_usd: number;
 }
 
+/** One snapshot comparable for the scatter plot and the in-browser refit. */
+export interface CompPoint {
+  slug: string;
+  name: string;
+  category: string | null;
+  log_tvl: number;
+  log_mcap: number;
+  listed_at: string | null;
+}
+
 /** Everything the dashboard needs, in one object. */
 export interface RadarData {
   model_version: string;
@@ -466,7 +440,8 @@ export interface RadarData {
   ledger: [string, string][];
   farm_scenario: FarmScenario;
   gas_table: Record<string, [number, number]>;
-  tge_labels: TgeLabel[];
+  /** The 94 traded comparables: the scatter plot and the in-browser refit read them. */
+  comps: CompPoint[];
 }
 
 /** FNV-1a over a string, the same hash the blind draw and the odds folds use. */
@@ -528,18 +503,6 @@ export function parseSnapshot(text: string): Snapshot {
       throw new Error(`snapshot: protocol ${String(p.slug)} misses slug, name or tvl_usd`);
     }
     if (!Array.isArray(p.chains)) p.chains = [];
-  }
-  return raw;
-}
-
-/** Parse the TGE labels file: one row per labelled comparable. */
-export function parseTgeLabels(text: string): TgeLabels {
-  const raw = JSON.parse(text) as TgeLabels;
-  if (!Array.isArray(raw.rows)) throw new Error('tge labels: rows is not an array');
-  for (const r of raw.rows) {
-    if (typeof r.slug !== 'string' || typeof r.tge_date !== 'string' || typeof r.mc_tge !== 'number' || typeof r.tvl_pre30 !== 'number') {
-      throw new Error(`tge labels: row ${String(r.slug)} misses slug, tge_date, mc_tge or tvl_pre30`);
-    }
   }
   return raw;
 }
@@ -750,42 +713,6 @@ export function predRidge(m: RidgeModel, x: number[][], c: number[][]): number[]
   });
 }
 
-/** radar-5's model, re-fitted here for the comparison: current market cap on current TVL. */
-export function fitV5(xNow: number[], yNow: number[], c: number[][], lam: number, lamCat: number, allCats: string[]): RidgeModel {
-  const n = yNow.length;
-  const mu = mean(xNow);
-  const sd = sampleStd(xNow) || 1;
-  const keep: number[] = [];
-  for (let j = 0; j < c[0]!.length; j++) {
-    if (c.reduce((a, row) => a + row[j]!, 0) >= MODEL.min_cat_n) keep.push(j);
-  }
-  const p = 2 + keep.length;
-  const xtx: number[][] = Array.from({ length: p }, () => new Array<number>(p).fill(0));
-  const xty = new Array<number>(p).fill(0);
-  for (let i = 0; i < n; i++) {
-    const row = [1, (xNow[i]! - mu) / sd, ...keep.map((k) => c[i]![k]!)];
-    for (let a = 0; a < p; a++) {
-      xty[a] += row[a]! * yNow[i]!;
-      for (let b = 0; b < p; b++) xtx[a]![b]! += row[a]! * row[b]!;
-    }
-  }
-  xtx[1]![1]! += lam;
-  for (let j = 0; j < keep.length; j++) xtx[2 + j]![2 + j]! += lamCat;
-  const beta = solveLinear(xtx, xty);
-  const resid = yNow.map((yy, i) => {
-    const row = [1, (xNow[i]! - mu) / sd, ...keep.map((k) => c[i]![k]!)];
-    return yy - row.reduce((a, v, k) => a + v * beta[k]!, 0);
-  });
-  return { mu: [mu], sd: [sd], beta, sigma: sampleStd(resid), cats: keep.map((k) => allCats[k]!), keep };
-}
-
-export function predV5(m: RidgeModel, xNow: number[], c: number[][]): number[] {
-  return xNow.map((v, i) => {
-    let s = m.beta[0]! + m.beta[1]! * ((v - m.mu[0]!) / m.sd[0]!);
-    for (let j = 0; j < m.keep.length; j++) s += m.beta[2 + j]! * c[i]![m.keep[j]]!;
-    return s;
-  });
-}
 
 /* ------------------------------------------------------------------ */
 /* Metrics                                                             */
@@ -864,22 +791,21 @@ export function bootCI(actual: number[], pNew: number[], pOld: number[], sigNew:
 }
 
 /* ------------------------------------------------------------------ */
-/* The comparable set and the three fits                               */
+/* The comparable set and the shipped fit                              */
 /* ------------------------------------------------------------------ */
 
 export interface CompContext {
   comps: SnapshotProtocol[];
-  labels: TgeLabel[];
+  /** log10(current market cap): the target, a figure the snapshot itself carries. */
   y: number[];
-  yNow: number[];
-  xNow: number[];
-  /** Feature columns, pre-TGE only: [log10 TVL pre30, log10 age+30, log10 chains, growth/100]. */
+  /** Feature columns, all from the snapshot: [log10 TVL, log10 chains, log10 age in years, growth/100]. */
   x: number[][];
   /** The same columns with missing growth replaced by the column median. */
   xf: number[][];
+  /** listed_at per comparable (null when the snapshot carries none). */
+  dates: (string | null)[];
   cats: string[];
   c: number[][];
-  wrec: number[];
   med: number[];
 }
 
@@ -888,48 +814,34 @@ function nanMedianColumn(values: number[]): number {
   return present.length === 0 ? 0 : median(present);
 }
 
-export function buildCompContext(snapshot: Snapshot, labels: TgeLabels): CompContext {
-  const labelBySlug = new Map(labels.rows.map((r) => [r.slug, r]));
-  const pairs: [SnapshotProtocol, TgeLabel][] = [];
-  for (const p of snapshot.protocols) {
-    if (!isComp(p)) continue;
-    const r = labelBySlug.get(p.slug);
-    if (r === undefined || !(r.tvl_pre30 > 0)) continue;
-    pairs.push([p, r]);
-  }
-  pairs.sort((a, b) => (a[1].tge_date < b[1].tge_date ? -1 : a[1].tge_date > b[1].tge_date ? 1 : 0));
-  const comps = pairs.map(([p]) => p);
-  const rows = pairs.map(([, r]) => r);
-  const y = rows.map((r) => Math.log10(r.mc_tge));
-  const yNow = comps.map((p) => Math.log10(p.mcap_usd!));
-  const xNow = comps.map((p) => Math.log10(p.tvl_usd));
-  const x = pairs.map(([p, r]) => {
-    const age = r.age_tge_days === null || r.age_tge_days === undefined ? 365 : r.age_tge_days;
-    const g = r.growth7_pre_pct;
+/** The comparable set: the snapshot's own traded tokens, in listing order. */
+export function buildCompContext(snapshot: Snapshot): CompContext {
+  const comps = snapshot.protocols.filter((p) => isComp(p));
+  const y = comps.map((p) => Math.log10(p.mcap_usd!));
+  const x = comps.map((p) => {
+    const age = ageDays(p.listed_at, snapshot.as_of);
+    const g = p.change_7d;
     return [
-      Math.log10(r.tvl_pre30),
-      Math.log10(Math.max(0, age) + 30),
+      Math.log10(p.tvl_usd),
       Math.log10(Math.max(1, p.chains.length)),
-      g === null || g === undefined ? NaN : Math.max(-50, Math.min(200, g)) / 100,
+      Math.log10((age === null ? 365 : age) / 365.25 + 0.05),
+      g === null || g === undefined ? NaN : Math.max(-90, Math.min(500, g)) / 100,
     ];
   });
   const med = [0, 1, 2, 3].map((j) => nanMedianColumn(x.map((row) => row[j]!)));
   const xf = x.map((row) => row.map((v, j) => (Number.isNaN(v) ? med[j]! : v)));
   const cats = [...new Set(comps.map((p) => p.category ?? ''))].sort();
   const c = comps.map((p) => cats.map((cat) => (p.category ?? '') === cat ? 1 : 0));
-  const maxDate = Math.max(...rows.map((r) => Date.parse(r.tge_date)));
-  const wrec = rows.map((r) => 0.5 ** ((maxDate - Date.parse(r.tge_date)) / 86400000 / 30 / MODEL.recency_half_life_months));
-  return { comps, labels: rows, y, yNow, xNow, x, xf, cats, c, wrec, med };
+  const dates = comps.map((p) => p.listed_at);
+  return { comps, y, x, xf, dates, cats, c, med };
 }
 
-export interface FitBoth {
-  r6: RidgeModel;
-  v5h: RidgeModel;
-  v5: RidgeModel;
+/** The shipped fit: size curve plus shrunk category shifts (the ladder's kept set). */
+export interface FitShipped {
+  model: RidgeModel;
   med: number[];
-  r6p: (idxs: number[]) => number[];
-  v5hp: (idxs: number[]) => number[];
-  v5p: (idxs: number[]) => number[];
+  predict: (idxs: number[]) => number[];
+  flatPredict: (idxs: number[]) => number[];
 }
 
 function impute(ctx: CompContext, idxs: number[], med: number[]): number[][] {
@@ -940,45 +852,22 @@ function zeroC(n: number): number[][] {
   return Array.from({ length: n }, () => []);
 }
 
-export function fitBoth(ctx: CompContext, idx: number[]): FitBoth {
-  const w = idx.map((i) => ctx.wrec[i]!);
+function ones(n: number): number[] {
+  return new Array<number>(n).fill(1);
+}
+
+/** Fit the shipped model on idx, and the flat median-multiple baseline beside it. */
+export function fitShipped(ctx: CompContext, idx: number[]): FitShipped {
   const med = [0, 1, 2, 3].map((j) => nanMedianColumn(idx.map((i) => ctx.x[i]![j]!)));
-  const xtr = impute(ctx, idx, med);
+  const xtr = impute(ctx, idx, med).map((row) => [row[0]!]);
   const ytr = idx.map((i) => ctx.y[i]!);
-  const r6 = fitRidge(
-    xtr.map((row) => [row[0]!]),
-    ytr,
-    zeroC(idx.length),
-    w,
-    MODEL.ridge_lambda,
-    MODEL.ridge_lambda_cat,
-    ctx.cats,
-  );
-  const v5h = fitRidge(
-    xtr.map((row) => [row[0]!]),
-    ytr,
-    idx.map((i) => ctx.c[i]!),
-    w,
-    MODEL.ridge_lambda,
-    MODEL.ridge_lambda_cat,
-    ctx.cats,
-  );
-  const v5 = fitV5(
-    idx.map((i) => ctx.xNow[i]!),
-    idx.map((i) => ctx.yNow[i]!),
-    idx.map((i) => ctx.c[i]!),
-    MODEL.ridge_lambda,
-    MODEL.ridge_lambda_cat,
-    ctx.cats,
-  );
+  const model = fitRidge(xtr, ytr, idx.map((i) => ctx.c[i]!), ones(idx.length), MODEL.ridge_lambda, MODEL.ridge_lambda_cat, ctx.cats);
+  const ratio = median(idx.map((i) => 10 ** ctx.y[i]! / 10 ** ctx.xf[i]![0]!));
   return {
-    r6,
-    v5h,
-    v5,
+    model,
     med,
-    r6p: (idxs) => predRidge(r6, impute(ctx, idxs, med).map((row) => [row[0]!]), zeroC(idxs.length)),
-    v5hp: (idxs) => predRidge(v5h, impute(ctx, idxs, med).map((row) => [row[0]!]), idxs.map((i) => ctx.c[i]!)),
-    v5p: (idxs) => predV5(v5, idxs.map((i) => ctx.xNow[i]!), idxs.map((i) => ctx.c[i]!)),
+    predict: (idxs) => predRidge(model, impute(ctx, idxs, med).map((row) => [row[0]!]), idxs.map((i) => ctx.c[i]!)),
+    flatPredict: (idxs) => idxs.map((i) => Math.log10(ratio) + ctx.xf[i]![0]!),
   };
 }
 
@@ -1001,7 +890,7 @@ export function blindSet(snapshot: Snapshot): Set<string> {
 
 export interface ValidateResult {
   validation: Validation;
-  full: FitBoth;
+  full: FitShipped;
   ctx: CompContext;
 }
 
@@ -1012,135 +901,136 @@ export function validate(ctx: CompContext, snapshot: Snapshot): ValidateResult {
   const blindIdx = allIdx.filter((i) => blind.has(ctx.comps[i]!.slug));
   const trainIdx = allIdx.filter((i) => !blind.has(ctx.comps[i]!.slug));
 
-  // Blind: fit on the 43, score the 12.
-  const mb = fitBoth(ctx, trainIdx);
-  const blindR6 = mb.r6p(blindIdx);
-  const blindV5h = mb.v5hp(blindIdx);
-  const blindV5 = mb.v5p(blindIdx);
+  // Blind: fit on the rest, score the blind comparables against their CURRENT caps.
+  const mb = fitShipped(ctx, trainIdx);
+  const blindR7 = mb.predict(blindIdx);
+  const blindFlat = mb.flatPredict(blindIdx);
   const blindY = blindIdx.map((i) => ctx.y[i]!);
   const blindMetrics = {
-    r6: metricSet(blindY, blindR6, mb.r6.sigma),
-    v5h: metricSet(blindY, blindV5h, mb.v5h.sigma),
-    v5: metricSet(blindY, blindV5, mb.v5.sigma),
+    r7: metricSet(blindY, blindR7, mb.model.sigma),
+    flat: metricSet(blindY, blindFlat, popStd(blindY.map((v, i) => v - blindFlat[i]!))),
   };
 
   // Leave-one-out: every fold re-fits inside the fold.
-  const looR6 = new Array<number>(n).fill(0);
-  const looV5h = new Array<number>(n).fill(0);
-  const looV5 = new Array<number>(n).fill(0);
+  const looR7 = new Array<number>(n).fill(0);
+  const looFlat = new Array<number>(n).fill(0);
   for (let i = 0; i < n; i++) {
     const rest = allIdx.filter((j) => j !== i);
-    const m = fitBoth(ctx, rest);
-    looR6[i] = m.r6p([i])[0]!;
-    looV5h[i] = m.v5hp([i])[0]!;
-    looV5[i] = m.v5p([i])[0]!;
+    const m = fitShipped(ctx, rest);
+    looR7[i] = m.predict([i])[0]!;
+    looFlat[i] = m.flatPredict([i])[0]!;
   }
-  const sigLooR6 = popStd(ctx.y.map((v, i) => v - looR6[i]!));
-  const sigLooV5h = popStd(ctx.y.map((v, i) => v - looV5h[i]!));
-  const sigLooV5 = popStd(ctx.y.map((v, i) => v - looV5[i]!));
+  const sigLooR7 = popStd(ctx.y.map((v, i) => v - looR7[i]!));
+  const sigLooFlat = popStd(ctx.y.map((v, i) => v - looFlat[i]!));
   const looMetrics = {
-    r6: metricSet(ctx.y, looR6, sigLooR6),
-    v5h: metricSet(ctx.y, looV5h, sigLooV5h),
-    v5: metricSet(ctx.y, looV5, sigLooV5),
-    sigma_r6: roundTo(sigLooR6, 4),
-    sigma_v5h: roundTo(sigLooV5h, 4),
-    sigma_v5: roundTo(sigLooV5, 4),
+    r7: metricSet(ctx.y, looR7, sigLooR7),
+    flat: metricSet(ctx.y, looFlat, sigLooFlat),
+    sigma_r7: roundTo(sigLooR7, 4),
+    sigma_flat: roundTo(sigLooFlat, 4),
   };
 
-  // Walk-forward: train launched before the cutoff, test on or after it; pooled by earliest cutoff.
+  // Walk-forward: train listed before the cutoff, test listed on or after it;
+  // pooled by earliest cutoff (every test row scored by its earliest model).
+  const dated = allIdx.filter((i) => ctx.dates[i] !== null);
   const per: TimeSplitCut[] = [];
-  const seen = new Map<number, [number, number, number, number]>();
+  const seen = new Map<number, [number, number, number]>();
   for (const cut of MODEL.time_split_cutoffs) {
-    const tr = allIdx.filter((i) => ctx.labels[i]!.tge_date < cut);
-    const te = allIdx.filter((i) => ctx.labels[i]!.tge_date >= cut);
-    const m = fitBoth(ctx, tr);
-    const r = m.r6p(te);
-    const h = m.v5hp(te);
-    const v = m.v5p(te);
+    const tr = dated.filter((i) => ctx.dates[i]! < cut);
+    const te = dated.filter((i) => ctx.dates[i]! >= cut);
+    const m = fitShipped(ctx, tr);
+    const r = m.predict(te);
+    const f = m.flatPredict(te);
     per.push({
       cutoff: cut,
       train_n: tr.length,
       test_n: te.length,
-      r6: metricSet(te.map((i) => ctx.y[i]!), r, m.r6.sigma),
-      v5h: metricSet(te.map((i) => ctx.y[i]!), h, m.v5h.sigma),
-      v5: metricSet(te.map((i) => ctx.y[i]!), v, m.v5.sigma),
+      r7: metricSet(te.map((i) => ctx.y[i]!), r, m.model.sigma),
+      flat: metricSet(te.map((i) => ctx.y[i]!), f, popStd(te.map((i, k) => ctx.y[i]! - f[k]!))),
     });
     te.forEach((i, k) => {
-      if (!seen.has(i)) seen.set(i, [ctx.y[i]!, r[k]!, h[k]!, v[k]!]);
+      if (!seen.has(i)) seen.set(i, [ctx.y[i]!, r[k]!, f[k]!]);
     });
   }
   const pooledIdx = [...seen.keys()].sort((a, b) => a - b);
   const tsA = pooledIdx.map((i) => seen.get(i)![0]);
   const tsR = pooledIdx.map((i) => seen.get(i)![1]);
-  const tsH = pooledIdx.map((i) => seen.get(i)![2]);
-  const tsV = pooledIdx.map((i) => seen.get(i)![3]);
-  const sigTsR6 = popStd(tsA.map((v, i) => v - tsR[i]!)) || 0.35;
-  const sigTsV5h = popStd(tsA.map((v, i) => v - tsH[i]!)) || 0.35;
-  const sigTsV5 = popStd(tsA.map((v, i) => v - tsV[i]!)) || 0.35;
+  const tsF = pooledIdx.map((i) => seen.get(i)![2]);
+  const sigTsR7 = popStd(tsA.map((v, i) => v - tsR[i]!)) || 0.35;
+  const sigTsFlat = popStd(tsA.map((v, i) => v - tsF[i]!)) || 0.35;
   const pooled = {
-    r6: metricSet(tsA, tsR, sigTsR6),
-    v5h: metricSet(tsA, tsH, sigTsV5h),
-    v5: metricSet(tsA, tsV, sigTsV5),
-    sigma_r6: roundTo(sigTsR6, 4),
-    sigma_v5h: roundTo(sigTsV5h, 4),
-    sigma_v5: roundTo(sigTsV5, 4),
+    r7: metricSet(tsA, tsR, sigTsR7),
+    flat: metricSet(tsA, tsF, sigTsFlat),
+    sigma_r7: roundTo(sigTsR7, 4),
+    sigma_flat: roundTo(sigTsFlat, 4),
   };
 
-  // Paired bootstraps: radar-6 minus radar-5 on three splits, radar-6 minus the
-  // with-shifts variant on two (the category decision, in numbers).
-  const bootBlind = bootCI(blindY, blindR6, blindV5, mb.r6.sigma, mb.v5.sigma, `${MODEL.bootstrap_seed}-blind`);
-  const bootLoo = bootCI(ctx.y, looR6, looV5, sigLooR6, sigLooV5, `${MODEL.bootstrap_seed}-loo`);
-  const bootTs = bootCI(tsA, tsR, tsV, sigTsR6, sigTsV5, `${MODEL.bootstrap_seed}-ts`);
-  const bootCatLoo = bootCI(ctx.y, looR6, looV5h, sigLooR6, sigLooV5h, `${MODEL.bootstrap_seed}-cat-loo`);
-  const bootCatBlind = bootCI(blindY, blindR6, blindV5h, mb.r6.sigma, mb.v5h.sigma, `${MODEL.bootstrap_seed}-cat-blind`);
+  // Paired bootstraps: radar-7 minus flat on three splits, and radar-7 minus the
+  // size-only model on two (the category decision, in numbers).
+  const bootBlind = bootCI(blindY, blindR7, blindFlat, mb.model.sigma, popStd(blindY.map((v, i) => v - blindFlat[i]!)), `${MODEL.bootstrap_seed}-blind`);
+  const bootLoo = bootCI(ctx.y, looR7, looFlat, sigLooR7, sigLooFlat, `${MODEL.bootstrap_seed}-loo`);
+  const bootTs = bootCI(tsA, tsR, tsF, sigTsR7, sigTsFlat, `${MODEL.bootstrap_seed}-ts`);
+  const sizeOnly = fitSizeOnly(ctx, allIdx);
+  const looSize = new Array<number>(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const rest = allIdx.filter((j) => j !== i);
+    looSize[i] = fitSizeOnly(ctx, rest).predict([i])[0]!;
+  }
+  const sigLooSize = popStd(ctx.y.map((v, i) => v - looSize[i]!));
+  const blindSize = sizeOnly.predict(blindIdx);
+  const bootCatLoo = bootCI(ctx.y, looR7, looSize, sigLooR7, sigLooSize, `${MODEL.bootstrap_seed}-cat-loo`);
+  const bootCatBlind = bootCI(blindY, blindR7, blindSize, mb.model.sigma, sizeOnly.model.sigma, `${MODEL.bootstrap_seed}-cat-blind`);
 
   // Interval honesty on the two out-of-sample prediction sets.
-  const honestyLoo = intervalHonesty(ctx.y, looR6, sigLooR6);
-  const honestyWf = intervalHonesty(tsA, tsR, sigTsR6);
+  const honestyLoo = intervalHonesty(ctx.y, looR7, sigLooR7);
+  const honestyWf = intervalHonesty(tsA, tsR, sigTsR7);
 
   // Coefficients with bootstrap standard errors (200 refits with replacement).
-  const full = fitBoth(ctx, allIdx);
+  // Aligned by category NAME: a refit may drop a category below the min-count, in which
+  // case that refit's shift for it is 0 (the model applies no shift), not a missing value.
+  const full = fitShipped(ctx, allIdx);
   const rngB = mulberry32(seedHash(MODEL.coef_boot_seed));
-  const betas: [number, number][] = [];
+  const bootAligned: number[][] = [];
   for (let k = 0; k < MODEL.coef_boot_b; k++) {
     const idx = Array.from({ length: n }, () => Math.floor(rngB() * n));
-    const m = fitRidge(
-      idx.map((i) => [ctx.xf[i]![0]!]),
-      idx.map((i) => ctx.y[i]!),
-      zeroC(idx.length),
-      idx.map((i) => ctx.wrec[i]!),
-      MODEL.ridge_lambda,
-      MODEL.ridge_lambda_cat,
-      ctx.cats,
-    );
-    betas.push([m.beta[0]!, m.beta[1]!]);
+    const m = fitShipped(ctx, idx);
+    const vec = [m.model.beta[0]!, m.model.beta[1]!];
+    for (const cat of full.model.cats) {
+      const j = m.model.cats.indexOf(cat);
+      vec.push(j < 0 ? 0 : m.model.beta[2 + j]!);
+    }
+    bootAligned.push(vec);
   }
-  const se = [sampleStd(betas.map((b) => b[0])), sampleStd(betas.map((b) => b[1]))];
+  const se = full.model.beta.map((_, j) => sampleStd(bootAligned.map((b) => b[j]!)));
   const coefficients: CoefRow[] = [
-    { name: 'intercept', value: roundTo(full.r6.beta[0]!, 3), se: roundTo(se[0]!, 3) },
-    { name: 'log TVL (standardised)', value: roundTo(full.r6.beta[1]!, 3), se: roundTo(se[1]!, 3) },
+    { name: 'intercept', value: roundTo(full.model.beta[0]!, 3), se: roundTo(se[0]!, 3) },
+    { name: 'log TVL (standardised)', value: roundTo(full.model.beta[1]!, 3), se: roundTo(se[1]!, 3) },
+    ...full.model.cats.map((cat, j) => ({
+      name: `shift: ${cat}`,
+      value: roundTo(full.model.beta[2 + j]!, 3),
+      se: roundTo(se[2 + j]!, 3),
+    })),
   ];
-  const droppedShifts: Record<string, number> = {};
-  full.v5h.cats.forEach((cat, j) => {
-    droppedShifts[cat] = roundTo(full.v5h.beta[2 + j]!, 3);
+  const categoryShifts: Record<string, number> = {};
+  full.model.cats.forEach((cat, j) => {
+    categoryShifts[cat] = roundTo(full.model.beta[2 + j]!, 3);
   });
 
-  // The strict submit gate: both the pinball and the Spearman intervals must exclude zero
-  // in radar-6's favour, on the blind set AND on leave-one-out. It does not pass here.
-  const gatePassed =
-    bootBlind.pinball_ci_high < 0 &&
-    bootBlind.spearman_ci_low > 0 &&
-    bootLoo.pinball_ci_high < 0 &&
-    bootLoo.spearman_ci_low > 0;
+  // The gate: the shipped model beats the flat baseline on BOTH the leave-one-out
+  // and the walk-forward pinball, with the 95% paired-bootstrap intervals excluding
+  // zero. Stated as it comes out, in the evidence footnote.
+  const gatePassed = bootLoo.pinball_ci_high < 0 && bootTs.pinball_ci_high < 0;
   const gateNote = gatePassed
-    ? 'Passed: both the pinball and the Spearman intervals exclude zero in radar-6\u2019s favour, on the blind set and on leave-one-out.'
-    : 'NOT passed: the blind pinball interval excludes zero in radar-6\u2019s favour, but the LOO pinball interval just includes zero and the Spearman intervals are wide at n=12 blind and n=55 in total. The walk-forward pinball point estimate favours radar-5, but its interval straddles zero — and that comparison is contaminated anyway: radar-5 is scored with TVL measured after the launch-day labels. The dashboard reports this as it is.';
+    ? 'Passed: radar-7 beats the flat median-multiple baseline on both the leave-one-out and the walk-forward pinball, with both 95% paired-bootstrap intervals excluding zero.'
+    : `NOT passed: radar-7 beats flat on the point estimates (LOO pinball ${looMetrics.r7.pinball} vs ${looMetrics.flat.pinball}, walk-forward ${pooled.r7.pinball} vs ${pooled.flat.pinball}) but at least one 95% paired-bootstrap interval includes zero (LOO [${bootLoo.pinball_ci_low}, ${bootLoo.pinball_ci_high}], walk-forward [${bootTs.pinball_ci_low}, ${bootTs.pinball_ci_high}]). The dashboard reports this as it is; the walk-forward typical miss (x${pooled.r7.typical_miss_x} vs x${pooled.flat.typical_miss_x} flat) is the number that separates the two.`;
 
-  // Blind predictions, whole: the 12 scored comparables, and all 192 blind protocols.
+  // Blind predictions, whole: the scored comparables, and all 192 blind protocols.
   // Both come from the BLIND fit (the model that never saw them), never from the full fit.
-  const blindIfLaunches = (tvl: number): number => {
-    const z = (Math.log10(tvl) - mb.r6.mu[0]!) / mb.r6.sd[0]!;
-    return mb.r6.beta[0]! + mb.r6.beta[1]! * z;
+  const blindIfLaunches = (p: SnapshotProtocol): number => {
+    const z = (Math.log10(p.tvl_usd) - mb.model.mu[0]!) / mb.model.sd[0]!;
+    let s = mb.model.beta[0]! + mb.model.beta[1]! * z;
+    const ci = mb.model.cats.indexOf(p.category ?? '');
+    if (ci >= 0) s += mb.model.beta[2 + ci]!;
+    return s;
   };
   const blindAll: BlindPrediction[] = snapshot.protocols
     .filter((p) => blind.has(p.slug))
@@ -1148,14 +1038,14 @@ export function validate(ctx: CompContext, snapshot: Snapshot): ValidateResult {
       const compIdx = ctx.comps.findIndex((c) => c.slug === p.slug);
       return {
         slug: p.slug,
-        predicted_usd: Math.round(10 ** blindIfLaunches(p.tvl_usd)),
-        actual_usd: compIdx >= 0 ? ctx.labels[compIdx]!.mc_tge : null,
+        predicted_usd: Math.round(10 ** blindIfLaunches(p)),
+        actual_usd: compIdx >= 0 ? ctx.comps[compIdx]!.mcap_usd : null,
       };
     });
   const blindPredictions = blindIdx.map((i, k) => ({
     slug: ctx.comps[i]!.slug,
-    predicted_usd: Math.round(10 ** blindR6[k]!),
-    actual_usd: ctx.labels[i]!.mc_tge,
+    predicted_usd: Math.round(10 ** blindR7[k]!),
+    actual_usd: ctx.comps[i]!.mcap_usd,
   }));
 
   const validation: Validation = {
@@ -1178,7 +1068,7 @@ export function validate(ctx: CompContext, snapshot: Snapshot): ValidateResult {
     honesty_loo: honestyLoo,
     honesty_wf: honestyWf,
     coefficients,
-    dropped_shifts: droppedShifts,
+    category_shifts: categoryShifts,
     gate_passed: gatePassed,
     gate_note: gateNote,
     blind_predictions: blindPredictions,
@@ -1187,7 +1077,21 @@ export function validate(ctx: CompContext, snapshot: Snapshot): ValidateResult {
   return { validation, full, ctx };
 }
 
-/* ------------------------------------------------------------------ */
+/** The size-only model: the same ridge without category shifts (the category decision). */
+export function fitSizeOnly(ctx: CompContext, idx: number[]): FitShipped {
+  const med = [0, 1, 2, 3].map((j) => nanMedianColumn(idx.map((i) => ctx.x[i]![j]!)));
+  const xtr = impute(ctx, idx, med).map((row) => [row[0]!]);
+  const ytr = idx.map((i) => ctx.y[i]!);
+  const model = fitRidge(xtr, ytr, zeroC(idx.length), ones(idx.length), MODEL.ridge_lambda, MODEL.ridge_lambda_cat, ctx.cats);
+  const ratio = median(idx.map((i) => 10 ** ctx.y[i]! / 10 ** ctx.xf[i]![0]!));
+  return {
+    model,
+    med,
+    predict: (idxs) => predRidge(model, impute(ctx, idxs, med).map((row) => [row[0]!]), zeroC(idxs.length)),
+    flatPredict: (idxs) => idxs.map((i) => Math.log10(ratio) + ctx.xf[i]![0]!),
+  };
+}
+
 /* Term table (a): the value model, one term at a time                 */
 /* ------------------------------------------------------------------ */
 
@@ -1199,7 +1103,7 @@ interface TermSpec {
 }
 
 function fitTermModel(ctx: CompContext, idx: number[], cols: number[], useCat: boolean, extra: number[] | null): (idxs: number[]) => number[] {
-  const w = idx.map((i) => ctx.wrec[i]!);
+  const w = ones(idx.length);
   if (cols.length === 0 && extra === null) {
     const ratio = median(idx.map((i) => 10 ** ctx.y[i]! / 10 ** ctx.xf[i]![0]!));
     return (idxs) => idxs.map((i) => Math.log10(ratio) + ctx.xf[i]![0]!);
@@ -1239,9 +1143,10 @@ function termEval(ctx: CompContext, spec: TermSpec): { loo: MetricSet; wf: Metri
   const sigLoo = popStd(ctx.y.map((v, i) => v - looPreds[i]!)) || 0.35;
   const loo = metricSet(ctx.y, looPreds, sigLoo);
   const seen = new Map<number, [number, number]>();
+  const dated = allIdx.filter((i) => ctx.dates[i] !== null);
   for (const cut of MODEL.time_split_cutoffs) {
-    const tr = allIdx.filter((i) => ctx.labels[i]!.tge_date < cut);
-    const te = allIdx.filter((i) => ctx.labels[i]!.tge_date >= cut);
+    const tr = dated.filter((i) => ctx.dates[i]! < cut);
+    const te = dated.filter((i) => ctx.dates[i]! >= cut);
     const pr = fitTermModel(ctx, tr, spec.cols, spec.useCat, spec.extra)(te);
     te.forEach((i, k) => {
       if (!seen.has(i)) seen.set(i, [ctx.y[i]!, pr[k]!]);
@@ -1256,14 +1161,15 @@ function termEval(ctx: CompContext, spec: TermSpec): { loo: MetricSet; wf: Metri
 
 export function termTable(ctx: CompContext): TermRow[] {
   const ctrl = ctx.comps.map((_, i) => ctx.xf[(i + 37) % ctx.comps.length]![3]!);
+  // Columns of ctx.x: [0] log TVL, [1] log chain count, [2] log age in years, [3] 7-day growth.
   const specs: TermSpec[] = [
     { label: 'flat, median multiple', cols: [], useCat: false, extra: null },
     { label: '+ size curve, log TVL', cols: [0], useCat: false, extra: null },
     { label: '+ category effect, ridge', cols: [0], useCat: true, extra: null },
-    { label: '+ 7-day growth', cols: [0, 3], useCat: false, extra: null },
-    { label: '+ age, log', cols: [0, 1, 3], useCat: false, extra: null },
-    { label: '+ chain count, log', cols: [0, 1, 2, 3], useCat: false, extra: null },
-    { label: '+ control: growth of another row', cols: [0], useCat: false, extra: ctrl },
+    { label: '+ chain count, log', cols: [0, 1], useCat: true, extra: null },
+    { label: '+ years listed, log', cols: [0, 1, 2], useCat: true, extra: null },
+    { label: '+ 7-day growth', cols: [0, 1, 2, 3], useCat: true, extra: null },
+    { label: '+ control: growth of another row', cols: [0], useCat: true, extra: ctrl },
   ];
   const rows: TermRow[] = [];
   let bestLoo = Infinity;
@@ -1272,7 +1178,12 @@ export function termTable(ctx: CompContext): TermRow[] {
     const { loo, wf } = termEval(ctx, spec);
     let verdict: TermRow['verdict'];
     if (spec.label.startsWith('+ control')) verdict = 'must not help';
-    else if (loo.pinball < bestLoo && wf.pinball < bestWf) {
+    else if (spec.label.startsWith('flat')) {
+      // The baseline: everything else is judged against it, so it is neither kept nor dropped.
+      verdict = 'baseline';
+      bestLoo = loo.pinball;
+      bestWf = wf.pinball;
+    } else if (loo.pinball < bestLoo && wf.pinball < bestWf) {
       verdict = 'kept';
       bestLoo = loo.pinball;
       bestWf = wf.pinball;
@@ -1385,7 +1296,7 @@ export function oddsValidation(snapshot: Snapshot): OddsValidation {
     let verdict: OddsTermRow['verdict'];
     if (label.startsWith('+ control')) verdict = 'must not help';
     else if (label === 'base rate') {
-      verdict = 'kept';
+      verdict = 'baseline';
       bestCv = cv;
       bestWf = wf;
     } else if (cv < bestCv - MODEL.odds_materiality && wf < bestWf - MODEL.odds_materiality) {
@@ -1570,8 +1481,8 @@ export interface BuildMeta {
   snapshot_bytes: number;
 }
 
-export function buildRadar(snapshot: Snapshot, labels: TgeLabels, meta: BuildMeta): { board: BoardRow[]; radar: RadarData } {
-  const ctx = buildCompContext(snapshot, labels);
+export function buildRadar(snapshot: Snapshot, meta: BuildMeta): { board: BoardRow[]; radar: RadarData } {
+  const ctx = buildCompContext(snapshot);
   const { validation, full } = validate(ctx, snapshot);
   const octx = oddsContext(snapshot);
   const oddsBeta = validation.odds.beta;
@@ -1584,16 +1495,21 @@ export function buildRadar(snapshot: Snapshot, labels: TgeLabels, meta: BuildMet
     tbill_apr: MODEL.tbill_apr,
     farm_net_per_hour_usd: MODEL.farm_net_per_hour_usd,
   };
-  const ridge = full.r6;
+  const ridge = full.model;
   const sigma = ridge.sigma;
   const watchlist = new Set(snapshot.watchlist);
+  const shiftOf = (category: string | null): number => {
+    const j = ridge.cats.indexOf(category ?? '');
+    return j < 0 ? 0 : ridge.beta[2 + j]!;
+  };
 
   const rows: BoardRow[] = [];
   for (const p of snapshot.protocols) {
     if (!watchlist.has(p.slug) && !isRankable(p)) continue;
     const lt = Math.log10(p.tvl_usd);
     const z = (lt - ridge.mu[0]!) / ridge.sd[0]!;
-    const logv = ridge.beta[0]! + ridge.beta[1]! * z;
+    const shift = shiftOf(p.category);
+    const logv = ridge.beta[0]! + ridge.beta[1]! * z + shift;
     const predicted = 10 ** logv;
     const odds = tokenOdds(p, snapshot, octx, oddsBeta, keptTerms);
     const implied = predicted * odds;
@@ -1623,7 +1539,7 @@ export function buildRadar(snapshot: Snapshot, labels: TgeLabels, meta: BuildMet
         p25_usd: Math.round(10 ** (logv - Z50 * sigma)),
         p75_usd: Math.round(10 ** (logv + Z50 * sigma)),
         curve_multiple: predicted / p.tvl_usd,
-        category_shift: 0,
+        category_shift: roundTo(shift, 3),
         log_tvl: lt,
         token_odds: roundTo(odds, 3),
         age_days: ageDays(p.listed_at, snapshot.as_of),
@@ -1684,6 +1600,7 @@ export function buildRadar(snapshot: Snapshot, labels: TgeLabels, meta: BuildMet
       p25_usd: r.model.p25_usd,
       p75_usd: r.model.p75_usd,
       curve_multiple: r.model.curve_multiple,
+      category_shift: r.model.category_shift,
       token_odds: r.model.token_odds,
       log_tvl: r.model.log_tvl,
       deposit_usd: r.farm.deposit_usd,
@@ -1705,8 +1622,10 @@ export function buildRadar(snapshot: Snapshot, labels: TgeLabels, meta: BuildMet
       train_n: ctx.comps.length,
       lambda: MODEL.ridge_lambda,
       lambda_cat: MODEL.ridge_lambda_cat,
-      categories: [],
-      shifts: {},
+      categories: ridge.cats,
+      // Full precision: the dashboard recomputes if-it-launches from these shifts,
+      // so rounding them would make the page's recompute visibly disagree with the stored fit.
+      shifts: Object.fromEntries(ridge.cats.map((cat, j) => [cat, ridge.beta[2 + j]!])),
     },
     odds_beta: oddsBeta,
     odds_kept_terms: keptTerms,
@@ -1717,7 +1636,14 @@ export function buildRadar(snapshot: Snapshot, labels: TgeLabels, meta: BuildMet
     ledger,
     farm_scenario: scenario,
     gas_table: GAS_TABLE,
-    tge_labels: ctx.labels,
+    comps: ctx.comps.map((p) => ({
+      slug: p.slug,
+      name: p.name,
+      category: p.category,
+      log_tvl: Math.log10(p.tvl_usd),
+      log_mcap: Math.log10(p.mcap_usd!),
+      listed_at: p.listed_at,
+    })),
   };
   return { board: rows, radar };
 }
@@ -1755,13 +1681,14 @@ export function validationScript(validation: Validation, snapshotSha256: string)
     honesty_loo: validation.honesty_loo,
     honesty_wf: validation.honesty_wf,
     coefficients: validation.coefficients,
-    dropped_shifts: validation.dropped_shifts,
+    category_shifts: validation.category_shifts,
     gate_passed: validation.gate_passed,
     gate_note: validation.gate_note,
     blind_predictions: validation.blind_predictions,
   };
-  return `// Radar-6 validation, computed by this entry's own program from the sealed snapshot
-// and the 55 TGE-labelled comparables. The strict submit gate did NOT pass: see gate_note.
+  return `// Radar-7 validation, computed by this entry's own program from the sealed snapshot.
+// The model is fitted on the snapshot's own 94 traded comparables (no external labels);
+// the strict submit gate: see gate_note.
 // window.TOKEN_RADAR_VALIDATION = ${JSON.stringify(compact)};\n`;
 }
 

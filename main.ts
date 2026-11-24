@@ -1,18 +1,20 @@
 // Token Radar's entry program (Node 22, standard library only).
 //
 // Reads the sealed snapshot from /input/snapshot.json (or --input <file|dir>), scores every
-// pre-token protocol with the radar-6 model in lib/model.ts, writes the ranked board to
+// pre-token protocol with the radar-7 model in lib/model.ts, writes the ranked board to
 // /output/board.json, writes the dashboard's data beside the page, and copies this repository's
 // dashboard/ and screenshots/ to /output. It also writes the validation's numbers to
 // /output/dashboard/validation.js, so the dossier's text carries the proof. Last, it writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 //
-// radar-6 fits its ridge on 55 TGE-labelled comparables read from data/tge_labels.json beside
-// main.ts: launch-day market caps against TVL 30 days before launch. The dashboard is a static
-// page, no framework and no network: dashboard/index.html, dashboard/app.css and
-// dashboard/app.js read /output/data.js, which this program writes from the same board. The
-// program runs twice and both runs must write the same bytes: nothing here reads the clock,
-// the network or a random value, so the two runs agree byte for byte.
+// radar-7 fits its ridge on the snapshot's OWN 94 traded comparables: current market caps
+// against current TVL, plus shrunk category shifts. No external labels, no TGE-day figures:
+// the value model follows from the snapshot's own figures, as the brief requires. The
+// dashboard is a static page, no framework and no network: dashboard/index.html,
+// dashboard/app.css and dashboard/app.js read /output/data.js, which this program writes
+// from the same board. The program runs twice and both runs must write the same bytes:
+// nothing here reads the clock, the network or a random value, so the two runs agree byte
+// for byte.
 //
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts --input ../input/snapshot.json
@@ -21,7 +23,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { boardIssue, boardTotals, buildRadar, dataScript, describeRow, parseSnapshot, parseTgeLabels, validationScript } from './lib/model.ts';
+import { boardIssue, boardTotals, buildRadar, dataScript, describeRow, parseSnapshot, validationScript } from './lib/model.ts';
 import { buildDossier } from './vendor/makefun-board.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -45,18 +47,12 @@ if (!existsSync(inputFile)) {
   process.stderr.write(`token radar: no snapshot at ${inputFile}: pass --input <snapshot.json|directory> or mount the sealed /input\n`);
   process.exit(2);
 }
-const labelsFile = join(here, 'data', 'tge_labels.json');
-if (!existsSync(labelsFile)) {
-  process.stderr.write(`token radar: no TGE labels at ${labelsFile}: the radar-6 fit needs them\n`);
-  process.exit(2);
-}
 const out = arg('output', process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
 
 const snapshotBytes = readFileSync(inputFile);
 const snapshotSha256 = createHash('sha256').update(snapshotBytes).digest('hex');
 const snapshot = parseSnapshot(snapshotBytes.toString('utf8'));
-const labels = parseTgeLabels(readFileSync(labelsFile, 'utf8'));
-const { board, radar } = buildRadar(snapshot, labels, { snapshot_sha256: snapshotSha256, snapshot_bytes: snapshotBytes.length });
+const { board, radar } = buildRadar(snapshot, { snapshot_sha256: snapshotSha256, snapshot_bytes: snapshotBytes.length });
 const issue = boardIssue(board, snapshot);
 if (issue !== null) {
   process.stderr.write(`token radar: the model wrote a board the gate refuses: ${issue}\n`);
@@ -111,11 +107,11 @@ const verdicts = board.reduce<Record<string, number>>((acc, row) => {
 }, {});
 process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (FARM ${verdicts.FARM ?? 0}, MARGINAL ${verdicts.MARGINAL ?? 0}, SKIP ${verdicts.SKIP ?? 0})\n` +
-    `token radar: input snapshot sha256 ${snapshotSha256} (${snapshotBytes.length} bytes); TGE labels ${labels.rows.length} rows\n` +
-    `token radar: radar-6 ridge: log10(mcap at TGE) = ${ridge.intercept.toFixed(3)} + ${ridge.slope_std.toFixed(3)} x z(log10(tvl 30d pre-TGE)) fitted on ${ridge.train_n} TGE-labelled comparables (lambda ${ridge.lambda}); raw slope ${ridge.raw_slope.toFixed(3)}; sigma ${ridge.sigma_log.toFixed(3)}; category shifts: none (tested, not kept)\n` +
-    `token radar: blind test (seed ${v.blind_seed}, ${v.blind_n} protocols, ${v.blind_scored_n} scored): pinball radar-6 ${v.blind.r6.pinball} vs with-shifts ${v.blind.v5h.pinball} vs radar-5 ${v.blind.v5.pinball}; Spearman ${v.blind.r6.spearman} vs ${v.blind.v5h.spearman} vs ${v.blind.v5.spearman}; 80% coverage ${v.blind.r6.coverage_80}\n` +
-    `token radar: leave-one-out pinball radar-6 ${v.loo.r6.pinball} vs with-shifts ${v.loo.v5h.pinball} vs radar-5 ${v.loo.v5.pinball}; Spearman ${v.loo.r6.spearman} vs ${v.loo.v5h.spearman} vs ${v.loo.v5.spearman}; walk-forward pooled pinball ${v.time_split_pooled.r6.pinball} vs ${v.time_split_pooled.v5h.pinball} vs ${v.time_split_pooled.v5.pinball}; Spearman ${v.time_split_pooled.r6.spearman} vs ${v.time_split_pooled.v5.spearman}\n` +
-    `token radar: paired bootstrap (${v.bootstrap_blind.b} resamples) radar-6 minus radar-5 — blind pinball ${v.bootstrap_blind.pinball_delta} [${v.bootstrap_blind.pinball_ci_low}, ${v.bootstrap_blind.pinball_ci_high}], Spearman ${v.bootstrap_blind.spearman_delta} [${v.bootstrap_blind.spearman_ci_low}, ${v.bootstrap_blind.spearman_ci_high}]; LOO pinball ${v.bootstrap_loo.pinball_delta} [${v.bootstrap_loo.pinball_ci_low}, ${v.bootstrap_loo.pinball_ci_high}], Spearman ${v.bootstrap_loo.spearman_delta} [${v.bootstrap_loo.spearman_ci_low}, ${v.bootstrap_loo.spearman_ci_high}]; walk-forward pinball ${v.bootstrap_ts.pinball_delta} [${v.bootstrap_ts.pinball_ci_low}, ${v.bootstrap_ts.pinball_ci_high}]\n` +
+    `token radar: input snapshot sha256 ${snapshotSha256} (${snapshotBytes.length} bytes); no external labels — fitted on the snapshot's own ${ridge.train_n} traded comparables\n` +
+    `token radar: radar-7 ridge: log10(current mcap) = ${ridge.intercept.toFixed(3)} + ${ridge.slope_std.toFixed(3)} x z(log10(current TVL)) fitted on ${ridge.train_n} snapshot comparables (lambda ${ridge.lambda}, lambda_cat ${ridge.lambda_cat}); raw slope ${ridge.raw_slope.toFixed(3)}; sigma ${ridge.sigma_log.toFixed(3)}; category shifts: ${ridge.categories.map((c) => `${c} ${ridge.shifts[c]}`).join(', ')}\n` +
+    `token radar: blind test (seed ${v.blind_seed}, ${v.blind_n} protocols, ${v.blind_scored_n} scored): pinball radar-7 ${v.blind.r7.pinball} vs flat ${v.blind.flat.pinball}; Spearman ${v.blind.r7.spearman} vs ${v.blind.flat.spearman}; 80% coverage ${v.blind.r7.coverage_80}\n` +
+    `token radar: leave-one-out pinball radar-7 ${v.loo.r7.pinball} vs flat ${v.loo.flat.pinball}; Spearman ${v.loo.r7.spearman} vs ${v.loo.flat.spearman}; walk-forward pooled pinball ${v.time_split_pooled.r7.pinball} vs flat ${v.time_split_pooled.flat.pinball}; Spearman ${v.time_split_pooled.r7.spearman} vs ${v.time_split_pooled.flat.spearman}\n` +
+    `token radar: paired bootstrap (${v.bootstrap_blind.b} resamples) radar-7 minus flat — blind pinball ${v.bootstrap_blind.pinball_delta} [${v.bootstrap_blind.pinball_ci_low}, ${v.bootstrap_blind.pinball_ci_high}], Spearman ${v.bootstrap_blind.spearman_delta} [${v.bootstrap_blind.spearman_ci_low}, ${v.bootstrap_blind.spearman_ci_high}]; LOO pinball ${v.bootstrap_loo.pinball_delta} [${v.bootstrap_loo.pinball_ci_low}, ${v.bootstrap_loo.pinball_ci_high}], Spearman ${v.bootstrap_loo.spearman_delta} [${v.bootstrap_loo.spearman_ci_low}, ${v.bootstrap_loo.spearman_ci_high}]; walk-forward pinball ${v.bootstrap_ts.pinball_delta} [${v.bootstrap_ts.pinball_ci_low}, ${v.bootstrap_ts.pinball_ci_high}]\n` +
     `token radar: submit gate ${v.gate_passed ? 'PASSED' : 'NOT passed'} — ${v.gate_note}\n` +
     `token radar: token odds: Brier ${v.odds.full_brier} full, CV ${v.odds.terms[v.odds.terms.length - 2]!.cv_brier} vs base ${v.odds.terms[0]!.cv_brier}; kept terms ${v.odds.kept_terms.join(', ')}\n` +
     `token radar: accounting: ${Object.entries(radar.accounting).map(([g, n]) => `${g} ${n}`).join(', ')} (total ${snapshot.protocols.length})\n` +
