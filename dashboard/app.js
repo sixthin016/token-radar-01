@@ -1,12 +1,5 @@
-// Launch Radar v7's dashboard. It reads window.TOKEN_RADAR (written beside dashboard/ by
-// main.ts) and renders the ranked board, the protocol accounting, a scatter of the 94 traded
-// comparables the value model is fitted on, the three out-of-sample evidence tables side by
-// side, and a per-protocol detail view with the model's own inputs, the per-row equation and
-// the farm plan. No network: every byte it shows is in data.js. The page recomputes every
-// row from the ridge coefficients and the odds beta data.js carries, and re-fits the ridge
-// in the browser from the 94 comparables, so the board, the detail view and the model card
-// are visibly the same arithmetic — and the fit can be checked without trusting the program
-// that wrote it.
+// Launch Radar v8's dashboard: renders window.TOKEN_RADAR, recomputes every row from the
+// ridge coefficients and odds beta in data.js, and re-fits the ridge in the browser.
 (function () {
   'use strict';
 
@@ -79,10 +72,11 @@
       log_age: Math.log10(age + 1),
       cat_share: DATA.cat_share[row.category || ''] === undefined ? DATA.cat_base_rate : DATA.cat_share[row.category || ''],
       growth7: Math.max(-80, Math.min(200, row.change_7d || 0)) / 100,
-      log_chains: Math.log10(Math.max(1, row.chains.length))
+      log_chains: Math.log10(Math.max(1, row.chains.length)),
+      age_missing: row.age_days === null || row.age_days === undefined ? 1 : 0
     };
     var z = DATA.odds_beta[0];
-    DATA.odds_kept_terms.forEach(function (t, j) { z += DATA.odds_beta[1 + j] * f[t]; });
+    DATA.odds_kept_terms.forEach(function (t, j) { z += DATA.odds_beta[1 + j] * (f[t] - DATA.odds_mu[t]) / DATA.odds_sd[t]; });
     return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
   }
   function gasFor(chain) { return DATA.gas_table[chain] || [2.0, 0.5]; }
@@ -202,7 +196,7 @@
     var ledgerTotal = Object.keys(DATA.accounting).reduce(function (a, g) { return a + DATA.accounting[g]; }, 0);
     var shiftsText = Object.keys(DATA.ridge.shifts).map(function (c) { return c + ' ' + (DATA.ridge.shifts[c] >= 0 ? '+' : '') + DATA.ridge.shifts[c].toFixed(3); }).join(', ');
     return el('div', {},
-      el('h1', { text: 'Launch Radar v7: every value term fitted on the snapshot\u2019s own traded tokens and tested held-out twice, farm plans netted to the dollar' }),
+      el('h1', { text: 'Launch Radar v8: every value term fitted on the snapshot\u2019s own traded tokens and tested held-out twice, token odds that tell launchers from the rest' }),
       el('p', { class: 'sub', text: DATA.rows.length + ' pre-token protocols ranked by implied value — the value if the token launches, times the odds it ever launches. The value model is a ridge of current market cap on current TVL, plus shrunk category shifts, fitted on the ' + v.comps_n + ' traded comparables the snapshot itself carries. No external labels, no launch-day figures, no name list: the same two functions score every row.' }),
       el('div', { class: 'kpis' },
         el('div', { class: 'kpi' }, el('div', { class: 'k' }, 'Walk-forward miss'), el('div', { class: 'v', html: '\u00d7' + v.time_split_pooled.r7.typical_miss_x + ' <small>vs \u00d7' + v.term_table[0].wf_miss_x + ' flat</small>' }), el('div', { class: 'd' }, 'pooled, ' + v.time_split_pooled.r7.n + ' listed since 2024')),
@@ -307,7 +301,7 @@
     var coefText = V.coefficients.map(function (c) { return c.name + ' ' + c.value.toFixed(3) + ' \u00b1 ' + c.se.toFixed(3); }).join(' \u00b7 ');
     return el('section', { class: 'card' },
       el('h2', { text: 'Evidence (a): value-model terms, out of sample' }),
-      el('p', { class: 'small', text: 'Each row adds one term to the last KEPT row and is scored leave-one-out and walk-forward (pooled, ' + V.time_split_pooled.r7.n + ' listed since 2024). A term is kept only when it lowers BOTH pinballs; a rejected term is reverted. The control — another row\u2019s 7-day growth — must not help, and it does not.' }),
+      el('p', { class: 'small', text: 'Each row adds one term to the last KEPT row and is scored leave-one-out and walk-forward (pooled, ' + V.time_split_pooled.r7.n + ' listed since 2024). A term is kept only when it lowers BOTH pinballs; a rejected term is reverted. The control — another row\u2019s 7-day growth — must not help, and it does not. v8 also re-tested chain count, years listed, 7-day growth, a quadratic size curve, category-relative TVL, median and Huber fits and an outlier-trimmed refit: none met the keep rule, so the shipped model is unchanged.' }),
       el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Term, added in order' }), el('th', { text: 'LOO pinball (miss)' }), el('th', { text: 'Walk-forward pinball (miss)' }), el('th', { text: 'Spearman LOO / WF' }), el('th', { text: 'Verdict' }))), el('tbody', {}, rows)),
       el('p', { class: 'small', text: 'Category shifts are KEPT and inside the shipped model: ' + shiftsText + '. Each is within ~1.5 bootstrap standard errors of zero on its own, but together they lower both pinballs (LOO ' + V.term_table[1].loo_pinball.toFixed(4) + ' \u2192 ' + V.term_table[2].loo_pinball.toFixed(4) + ', walk-forward ' + V.term_table[1].wf_pinball.toFixed(4) + ' \u2192 ' + V.term_table[2].wf_pinball.toFixed(4) + '), so the ladder keeps them. Fitted coefficients (bootstrap SE): ' + coefText + '.' })
     );
@@ -319,14 +313,15 @@
         el('td', { text: r.term }),
         el('td', { class: 'num', text: r.cv_brier.toFixed(3) }),
         el('td', { class: 'num', text: r.wf_brier.toFixed(3) }),
+        el('td', { class: 'num', text: r.perm_cv_brier.toFixed(3) }),
         el('td', { text: r.verdict }));
     });
     var keptOdds = V.odds.terms.filter(function (t) { return t.verdict === 'kept'; });
     var lastKept = keptOdds[keptOdds.length - 1];
     return el('section', { class: 'card' },
       el('h2', { text: 'Evidence (b): token odds, Brier score' }),
-      el('p', { class: 'small', text: 'Logistic regression on ' + V.odds.peers_n + ' peers (base rate ' + V.odds.base_rate.toFixed(3) + '). Folds are hash folds — fold = FNV-1a(slug) mod 10 — so the table is identical in the program and in the independent re-check. A term is kept only when it lowers BOTH the 10-fold CV Brier and the walk-forward Brier by at least 0.001: the chain-count term flips between fold schemes (no help at all with seeded-permutation folds, +0.0002 with hash folds), which is within fold noise, so it is not kept. Full-data Brier ' + V.odds.full_brier.toFixed(3) + '; beta [' + V.odds.beta.map(function (b) { return b.toFixed(3); }).join(', ') + '] on [' + V.odds.kept_terms.join(', ') + ']. The improvement over base is small (CV ' + V.odds.terms[0].cv_brier.toFixed(3) + ' \u2192 ' + lastKept.cv_brier.toFixed(3) + '), stated as measured.' }),
-      el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Term, added in order' }), el('th', { text: '10-fold CV Brier' }), el('th', { text: 'Walk-forward Brier' }), el('th', { text: 'Verdict' }))), el('tbody', {}, rows))
+      el('p', { class: 'small', text: 'Logistic regression on ' + V.odds.peers_n + ' peers (base rate ' + V.odds.base_rate.toFixed(3) + '). Every feature is standardised (mean/sd over the peers, taken inside each training fold) before the L2 = 1 fit: on raw scales one penalty shrank the features unevenly, and standardising alone moves the CV Brier 0.146 \u2192 0.137 and the walk-forward 0.121 \u2192 0.116 at the same terms. A term is kept only when it lowers BOTH the 10-fold CV Brier and the walk-forward Brier by at least 0.001 — except listed_at missing (1 when the snapshot carries no listing date), which the walk-forward split cannot see: its rows never enter it, so it is kept when it lowers BOTH the hash-fold and the seeded-permutation CV by at least 0.001 instead (0.139 \u2192 0.132 on both; peers with no listing date tokenise at 37.5% vs 17.0% dated). 7-day growth is tested, not kept: it lowers the CV (0.139 \u2192 0.137) but raises the walk-forward Brier (0.108 \u2192 0.115) under standardisation. Full-data Brier ' + V.odds.full_brier.toFixed(3) + '; beta [' + V.odds.beta.map(function (b) { return b.toFixed(3); }).join(', ') + '] on [' + V.odds.kept_terms.join(', ') + '], standardised scale. Improvement over base: CV ' + V.odds.terms[0].cv_brier.toFixed(3) + ' \u2192 ' + lastKept.cv_brier.toFixed(3) + ', walk-forward ' + V.odds.terms[0].wf_brier.toFixed(3) + ' \u2192 ' + lastKept.wf_brier.toFixed(3) + '.' }),
+      el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Term, added in order' }), el('th', { text: '10-fold CV Brier' }), el('th', { text: 'Walk-forward Brier' }), el('th', { text: 'Perm. CV Brier' }), el('th', { text: 'Verdict' }))), el('tbody', {}, rows))
     );
   }
 
@@ -345,9 +340,9 @@
           el('tr', {}, el('td', { text: 'Within \u00d73 of the model' }), el('td', { class: 'num', text: (V.honesty_loo.within_x3 * 100).toFixed(1) + '%' }), el('td', { class: 'num', text: (V.honesty_wf.within_x3 * 100).toFixed(1) + '%' }), el('td', { text: '\u2014' })),
           el('tr', {}, el('td', { text: 'Inside P25\u2013P75' }), el('td', { class: 'num', text: (V.honesty_loo.inside_p25_p75 * 100).toFixed(1) + '%' }), el('td', { class: 'num', text: (V.honesty_wf.inside_p25_p75 * 100).toFixed(1) + '%' }), el('td', { text: '50%' })),
           el('tr', {}, el('td', { text: 'Inside P10\u2013P90' }), el('td', { class: 'num', text: (V.honesty_loo.inside_p10_p90 * 100).toFixed(1) + '%' }), el('td', { class: 'num', text: (V.honesty_wf.inside_p10_p90 * 100).toFixed(1) + '%' }), el('td', { text: '80%' })))),
-      el('p', { class: 'small', text: 'The 80% band covers ' + (V.honesty_loo.inside_p10_p90 * 100).toFixed(0) + '% leave-one-out and ' + (V.honesty_wf.inside_p10_p90 * 100).toFixed(0) + '% walk-forward: about as stated. Blind (n=' + V.blind_scored_n + ' of ' + V.blind_n + '): pinball radar-7 ' + V.blind.r7.pinball + ' vs flat ' + V.blind.flat.pinball + '; Spearman ' + V.blind.r7.spearman + ' vs ' + V.blind.flat.spearman + '. LOO (n=' + V.loo.r7.n + '): pinball ' + V.loo.r7.pinball + ' vs ' + V.loo.flat.pinball + '; Spearman ' + V.loo.r7.spearman + ' vs ' + V.loo.flat.spearman + '. Walk-forward pooled (n=' + V.time_split_pooled.r7.n + '): pinball ' + V.time_split_pooled.r7.pinball + ' vs ' + V.time_split_pooled.flat.pinball + '; Spearman ' + V.time_split_pooled.r7.spearman + ' vs ' + V.time_split_pooled.flat.spearman + '.' }),
+      el('p', { class: 'small', text: 'The 80% band covers ' + (V.honesty_loo.inside_p10_p90 * 100).toFixed(0) + '% leave-one-out and ' + (V.honesty_wf.inside_p10_p90 * 100).toFixed(0) + '% walk-forward: about as stated. Blind (n=' + V.blind_scored_n + ' of ' + V.blind_n + '): pinball radar-8 ' + V.blind.r7.pinball + ' vs flat ' + V.blind.flat.pinball + '; Spearman ' + V.blind.r7.spearman + ' vs ' + V.blind.flat.spearman + '. LOO (n=' + V.loo.r7.n + '): pinball ' + V.loo.r7.pinball + ' vs ' + V.loo.flat.pinball + '; Spearman ' + V.loo.r7.spearman + ' vs ' + V.loo.flat.spearman + '. Walk-forward pooled (n=' + V.time_split_pooled.r7.n + '): pinball ' + V.time_split_pooled.r7.pinball + ' vs ' + V.time_split_pooled.flat.pinball + '; Spearman ' + V.time_split_pooled.r7.spearman + ' vs ' + V.time_split_pooled.flat.spearman + '.' }),
       el('div', { class: 'note' + (V.gate_passed ? ' good' : ''), }, el('b', { text: V.gate_passed ? 'Submit gate passed. ' : 'Submit gate NOT passed. ' }), V.gate_note),
-      el('div', { class: 'note' }, el('b', { text: 'Paired bootstrap, radar-7 minus flat (10,000 resamples). ' }), 'Blind pinball ' + V.bootstrap_blind.pinball_delta + ' [' + V.bootstrap_blind.pinball_ci_low + ', ' + V.bootstrap_blind.pinball_ci_high + ']; LOO pinball ' + V.bootstrap_loo.pinball_delta + ' [' + V.bootstrap_loo.pinball_ci_low + ', ' + V.bootstrap_loo.pinball_ci_high + ']; walk-forward pinball ' + V.bootstrap_ts.pinball_delta + ' [' + V.bootstrap_ts.pinball_ci_low + ', ' + V.bootstrap_ts.pinball_ci_high + ']. Category shifts, radar-7 minus size-only: LOO pinball ' + V.bootstrap_cat_loo.pinball_delta + ' [' + V.bootstrap_cat_loo.pinball_ci_low + ', ' + V.bootstrap_cat_loo.pinball_ci_high + ']; blind ' + V.bootstrap_cat_blind.pinball_delta + ' [' + V.bootstrap_cat_blind.pinball_ci_low + ', ' + V.bootstrap_cat_blind.pinball_ci_high + '].'),
+      el('div', { class: 'note' }, el('b', { text: 'Paired bootstrap, radar-8 minus flat (10,000 resamples). ' }), 'Blind pinball ' + V.bootstrap_blind.pinball_delta + ' [' + V.bootstrap_blind.pinball_ci_low + ', ' + V.bootstrap_blind.pinball_ci_high + ']; LOO pinball ' + V.bootstrap_loo.pinball_delta + ' [' + V.bootstrap_loo.pinball_ci_low + ', ' + V.bootstrap_loo.pinball_ci_high + ']; walk-forward pinball ' + V.bootstrap_ts.pinball_delta + ' [' + V.bootstrap_ts.pinball_ci_low + ', ' + V.bootstrap_ts.pinball_ci_high + ']. Category shifts, radar-8 minus size-only: LOO pinball ' + V.bootstrap_cat_loo.pinball_delta + ' [' + V.bootstrap_cat_loo.pinball_ci_low + ', ' + V.bootstrap_cat_loo.pinball_ci_high + ']; blind ' + V.bootstrap_cat_blind.pinball_delta + ' [' + V.bootstrap_cat_blind.pinball_ci_low + ', ' + V.bootstrap_cat_blind.pinball_ci_high + '].'),
       el('h3', { text: 'The blind test\u2019s ' + V.blind_scored_n + ' scored predictions, whole (predicted if-it-launches vs actual current market cap)' }),
       el('table', {}, el('thead', {}, el('tr', {}, el('th', { text: 'Protocol' }), el('th', { text: 'Predicted' }), el('th', { text: 'Actual (current cap)' }), el('th', { text: 'Miss' }))), el('tbody', {}, blindRows))
     );
@@ -490,9 +485,10 @@
     oddsDl.appendChild(el('dd', { text: DATA.odds_beta[0].toFixed(3) }));
     DATA.odds_kept_terms.forEach(function (t, j) {
       var age = r.age_days === null || r.age_days === undefined ? 365 : r.age_days;
-      var f = { log_tvl: Math.log10(Math.max(1, r.tvl_usd)), log_age: Math.log10(age + 1), cat_share: DATA.cat_share[r.category || ''] === undefined ? DATA.cat_base_rate : DATA.cat_share[r.category || ''], growth7: Math.max(-80, Math.min(200, r.change_7d || 0)) / 100, log_chains: Math.log10(Math.max(1, r.chains.length)) };
-      oddsDl.appendChild(el('dt', { text: t }));
-      oddsDl.appendChild(el('dd', { text: (DATA.odds_beta[1 + j] >= 0 ? '+' : '') + DATA.odds_beta[1 + j].toFixed(3) + ' \u00d7 ' + f[t].toFixed(3) + ' = ' + (DATA.odds_beta[1 + j] * f[t]).toFixed(3) }));
+      var f = { log_tvl: Math.log10(Math.max(1, r.tvl_usd)), log_age: Math.log10(age + 1), cat_share: DATA.cat_share[r.category || ''] === undefined ? DATA.cat_base_rate : DATA.cat_share[r.category || ''], growth7: Math.max(-80, Math.min(200, r.change_7d || 0)) / 100, log_chains: Math.log10(Math.max(1, r.chains.length)), age_missing: r.age_days === null || r.age_days === undefined ? 1 : 0 };
+      var zv = (f[t] - DATA.odds_mu[t]) / DATA.odds_sd[t];
+      oddsDl.appendChild(el('dt', { text: t + ' (z)' }));
+      oddsDl.appendChild(el('dd', { text: (DATA.odds_beta[1 + j] >= 0 ? '+' : '') + DATA.odds_beta[1 + j].toFixed(3) + ' \u00d7 ' + zv.toFixed(3) + ' = ' + (DATA.odds_beta[1 + j] * zv).toFixed(3) }));
     });
     var g = gasFor(r.chains[0]);
     var weeksRows = [4, 8, 12, 26].map(function (w) {
@@ -561,10 +557,12 @@
   }
 
   function footer() {
+    var keptO = V.odds.terms.filter(function (t) { return t.verdict === 'kept'; });
+    var lastO = keptO[keptO.length - 1];
     return el('footer', {},
       el('p', { text: 'Method: ' + V.comps_n + ' snapshot comparables — traded protocols with a usable market cap and TVL, in the snapshot itself; no external labels, no launch-day figures. Snapshot as of ' + DATA.snapshot_as_of + ', floor ' + fmtMoney(DATA.floor_usd) + ', sha256 ' + DATA.snapshot_sha256 + '.' }),
-      el('p', { text: 'Limitations, stated: the strict submit gate ' + (V.gate_passed ? 'passed' : 'did not pass') + ' (see evidence (c)); the value model explains little of the variation (leave-one-out R\u00b2 ' + V.loo.r7.r2_log.toFixed(2) + ') — heavy tails dominate, so the bands stay wide; no row clears the $25/hour farm bar, so no row carries a FARM verdict (best row pays $' + Math.max.apply(null, DATA.rows.map(function (r) { return r.net_per_hour_usd; })).toFixed(2) + '/h); no parent discount is applied to off-list rows because the snapshot carries no parentProtocol field; the odds model improves only slightly on its base rate (see evidence (b)). The board is deterministic: the entry program runs twice and writes identical bytes.' }),
-      el('p', { text: 'Launch Radar v7 \u00b7 model radar-7 \u00b7 data.js carries the whole radar, including the ' + V.comps_n + ' comparables, so the fit can be re-run in this page.' })
+      el('p', { text: 'Limitations, stated: the strict submit gate ' + (V.gate_passed ? 'passed' : 'did not pass') + ' (see evidence (c)); the value model explains little of the variation (leave-one-out R\u00b2 ' + V.loo.r7.r2_log.toFixed(2) + ') — heavy tails dominate, so the bands stay wide; no row clears the $25/hour farm bar, so no row carries a FARM verdict (best row pays $' + Math.max.apply(null, DATA.rows.map(function (r) { return r.net_per_hour_usd; })).toFixed(2) + '/h); no parent discount is applied to off-list rows because the snapshot carries no parentProtocol field; the odds model improves on its base rate by ' + (V.odds.terms[0].cv_brier - lastO.cv_brier).toFixed(3) + ' CV Brier and ' + (V.odds.terms[0].wf_brier - lastO.wf_brier).toFixed(3) + ' walk-forward (see evidence (b)). The board is deterministic: the entry program runs twice and writes identical bytes.' }),
+      el('p', { text: 'Launch Radar v8 \u00b7 model radar-8 \u00b7 data.js carries the whole radar, including the ' + V.comps_n + ' comparables, so the fit can be re-run in this page.' })
     );
   }
 
@@ -575,10 +573,10 @@
       var e = econOf(r);
       return [r.rank, r.slug, '"' + r.name.replace(/"/g, '""') + '"', '"' + (r.category || '') + '"', r.tvl_usd, r.change_7d === null ? '' : r.change_7d, r.age_days === null ? '' : r.age_days, r.token_odds, r.predicted_usd, r.implied_value_usd, e.deposit.toFixed(2), e.drop.toFixed(2), e.fees.toFixed(2), e.net.toFixed(2), e.netHour.toFixed(2), e.verdict].join(',');
     }).join('\n');
-    download('launch-radar-v7-board.csv', 'text/csv', head + body + '\n');
+    download('launch-radar-v8-board.csv', 'text/csv', head + body + '\n');
   }
   function downloadJson() {
-    download('launch-radar-v7-board.json', 'application/json', JSON.stringify({ rows: filteredRows() }, null, 1));
+    download('launch-radar-v8-board.json', 'application/json', JSON.stringify({ rows: filteredRows() }, null, 1));
   }
   function download(name, type, text) {
     var a = document.createElement('a');

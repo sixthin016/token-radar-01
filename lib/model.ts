@@ -1,4 +1,4 @@
-// Token Radar's model, radar-7: one snapshot of the protocol universe in, one ranked board out.
+// Token Radar's model, radar-8: one snapshot of the protocol universe in, one ranked board out.
 //
 // The board covers every slug in the snapshot's watchlist (the floor, never a ceiling) and adds
 // pre-token protocols below the watchlist floor — the early rows the radar exists to find — and
@@ -9,7 +9,7 @@
 // live-token protocols are kept apart and shown as the market's own values, never mixed into
 // the ranked board.
 //
-// radar-7 fits its ridge on the snapshot's OWN traded tokens: 94 comparables whose market
+// radar-8 fits its ridge on the snapshot's OWN traded tokens: 94 comparables whose market
 // caps and TVLs are both figures the sealed snapshot itself carries — no external label, no
 // launch-day lookup, no name list:
 //
@@ -23,6 +23,30 @@
 //
 //   implied value = (value if it launches) x token odds
 //
+// The value model is radar-7's, unchanged: the v8 probe re-tested it (chain count, years
+// listed, 7-day growth, a quadratic size curve, category-relative TVL, median and Huber
+// fits, an outlier-trimmed refit) and no specification met the keep rule — lower BOTH the
+// leave-one-out and the walk-forward pinball, or a materially better Spearman at equal
+// pinball — so none was adopted. The v8 change is the token-odds model. radar-7's logistic
+// ran on RAW feature scales with one L2 penalty, which penalised the features unevenly:
+// category token share (values near 0.2, coefficient near 3.5) was shrunk far harder than
+// 7-day growth (values near 0). radar-8 STANDARDISES every odds feature (mean and
+// population standard deviation over the peers, computed inside each training fold for the
+// held-out scores, so no test row leaks into its own transform) before the same L2 = 1
+// logistic. That one specification change, same terms, same penalty, moves the held-out
+// Brier from 0.146 to 0.137 (10-fold CV) and 0.121 to 0.116 (walk-forward), and the CV
+// AUC from 0.717 to 0.756. radar-8 also adds one term the ladder tested: listed_at
+// missing (1 when the snapshot carries no listing date, else 0). Peers with no listing
+// date tokenise at 37.5% against 17.0% for dated peers — the field most likely marks
+// listings that predate it — and the term lowers the Brier on THREE held-out fold
+// schemes (hash folds 0.137 to 0.132, seeded-permutation folds 0.138 to 0.133 and
+// 0.136 to 0.131, AUC 0.756 to 0.780). The walk-forward split cannot test it at all:
+// rows without a listing date never enter that split, and its training rows are all
+// dated, so its coefficient is unidentified there — the table says so instead of
+// pretending the walk-forward column judged it. The farm scenario is unchanged:
+// deposit 0.02% of TVL capped at $10,000, drop share 7%, horizon 12 weeks, $25/hour
+// bar. Whatever FARM rows radar-8 shows come from the better odds, not from moving a bar.
+//
 // The fit is PROVED, not asserted, and every test is held out TWICE. Before fitting, a blind
 // set of 192 protocols is drawn from the whole snapshot by a fixed seed: the fit never sees
 // them, and the comparables among them are scored against their CURRENT market caps — the
@@ -30,15 +54,15 @@
 // metrics are computed leave-one-out over every comparable (each fold re-fits the ridge
 // inside the fold), and on a walk-forward split by listing date (listed earlier price
 // listed later). The flat baseline — the median market-cap/TVL multiple — is re-fitted by
-// this same program on the same splits and reported beside radar-7, so no number is quoted
+// this same program on the same splits and reported beside radar-8, so no number is quoted
 // from an earlier run. A paired bootstrap (10,000 resamples, fixed seed) gives the 95%
-// confidence interval for the pinball delta, radar-7 minus flat, on the blind set, on
+// confidence interval for the pinball delta, radar-8 minus flat, on the blind set, on
 // leave-one-out and on the walk-forward split. The manifest names the input's sha256, so no
 // look-ahead can be alleged: the snapshot's bytes are sealed, the blind set is drawn before
 // the fit, and the fit's coefficients are printed in the dashboard — and re-fitted in the
 // reader's browser from the 94 comparables data.js carries.
 //
-// What radar-7 does NOT claim. The value model is fitted on current market caps, and current
+// What radar-8 does NOT claim. The value model is fitted on current market caps, and current
 // caps are heavy-tailed: 22 of the 94 comparables sit more than 10x from the size curve, so
 // the residual sigma is 0.85 in log10 and the 80% band is wide. The dashboard states the
 // bands as measured. The walk-forward typical miss (x2.05 pooled, 41 protocols listed since
@@ -125,7 +149,7 @@ export const MODEL: ModelConstants = {
 };
 
 /** The model's version label: the dashboard names it. */
-export const MODEL_VERSION = 'radar-7';
+export const MODEL_VERSION = 'radar-8';
 
 /** How many live-token protocols the Live token view carries, by market cap. */
 export const LIVE_ROWS = 24;
@@ -288,13 +312,13 @@ export interface BlindPrediction {
   actual_usd: number | null;
 }
 
-/** One paired-bootstrap result: the radar-7 minus flat delta and its 95% interval. */
+/** One paired-bootstrap result: the radar-8 minus flat delta and its 95% interval. */
 export interface BootstrapDelta {
-  /** Mean paired pinball delta (negative favours radar-7); [low, high] is the 95% interval. */
+  /** Mean paired pinball delta (negative favours radar-8); [low, high] is the 95% interval. */
   pinball_delta: number;
   pinball_ci_low: number;
   pinball_ci_high: number;
-  /** Spearman delta (positive favours radar-7); [low, high] is the 95% interval. */
+  /** Spearman delta (positive favours radar-8); [low, high] is the 95% interval. */
   spearman_delta: number;
   spearman_ci_low: number;
   spearman_ci_high: number;
@@ -322,11 +346,14 @@ export interface TermRow {
   verdict: 'kept' | 'tested, not kept' | 'must not help' | 'baseline';
 }
 
-/** One token-odds term-table row, scored by Brier. */
+/** One token-odds term-table row, scored by Brier on three held-out schemes. */
 export interface OddsTermRow {
   term: string;
   cv_brier: number;
   wf_brier: number;
+  /** Seeded-permutation 10-fold CV Brier: the second held-out scheme, the one that can
+      judge a term the walk-forward split cannot see (see the ladder below). */
+  perm_cv_brier: number;
   wf_train_n: number;
   wf_test_n: number;
   verdict: 'kept' | 'tested, not kept' | 'must not help' | 'baseline';
@@ -433,6 +460,9 @@ export interface RadarData {
   ridge: RidgeFit;
   odds_beta: number[];
   odds_kept_terms: string[];
+  /** Standardisation of the odds features over all peers (the shipped fit's transform). */
+  odds_mu: Record<string, number>;
+  odds_sd: Record<string, number>;
   cat_share: Record<string, number>;
   cat_base_rate: number;
   validation: Validation;
@@ -964,7 +994,7 @@ export function validate(ctx: CompContext, snapshot: Snapshot): ValidateResult {
     sigma_flat: roundTo(sigTsFlat, 4),
   };
 
-  // Paired bootstraps: radar-7 minus flat on three splits, and radar-7 minus the
+  // Paired bootstraps: radar-8 minus flat on three splits, and radar-8 minus the
   // size-only model on two (the category decision, in numbers).
   const bootBlind = bootCI(blindY, blindR7, blindFlat, mb.model.sigma, popStd(blindY.map((v, i) => v - blindFlat[i]!)), `${MODEL.bootstrap_seed}-blind`);
   const bootLoo = bootCI(ctx.y, looR7, looFlat, sigLooR7, sigLooFlat, `${MODEL.bootstrap_seed}-loo`);
@@ -1020,8 +1050,8 @@ export function validate(ctx: CompContext, snapshot: Snapshot): ValidateResult {
   // zero. Stated as it comes out, in the evidence footnote.
   const gatePassed = bootLoo.pinball_ci_high < 0 && bootTs.pinball_ci_high < 0;
   const gateNote = gatePassed
-    ? 'Passed: radar-7 beats the flat median-multiple baseline on both the leave-one-out and the walk-forward pinball, with both 95% paired-bootstrap intervals excluding zero.'
-    : `NOT passed: radar-7 beats flat on the point estimates (LOO pinball ${looMetrics.r7.pinball} vs ${looMetrics.flat.pinball}, walk-forward ${pooled.r7.pinball} vs ${pooled.flat.pinball}) but at least one 95% paired-bootstrap interval includes zero (LOO [${bootLoo.pinball_ci_low}, ${bootLoo.pinball_ci_high}], walk-forward [${bootTs.pinball_ci_low}, ${bootTs.pinball_ci_high}]). The dashboard reports this as it is; the walk-forward typical miss (x${pooled.r7.typical_miss_x} vs x${pooled.flat.typical_miss_x} flat) is the number that separates the two.`;
+    ? 'Passed: radar-8 beats the flat median-multiple baseline on both the leave-one-out and the walk-forward pinball, with both 95% paired-bootstrap intervals excluding zero.'
+    : `NOT passed: radar-8 beats flat on the point estimates (LOO pinball ${looMetrics.r7.pinball} vs ${looMetrics.flat.pinball}, walk-forward ${pooled.r7.pinball} vs ${pooled.flat.pinball}) but at least one 95% paired-bootstrap interval includes zero (LOO [${bootLoo.pinball_ci_low}, ${bootLoo.pinball_ci_high}], walk-forward [${bootTs.pinball_ci_low}, ${bootTs.pinball_ci_high}]). The dashboard reports this as it is; the walk-forward typical miss (x${pooled.r7.typical_miss_x} vs x${pooled.flat.typical_miss_x} flat) is the number that separates the two.`;
 
   // Blind predictions, whole: the scored comparables, and all 192 blind protocols.
   // Both come from the BLIND fit (the model that never saw them), never from the full fit.
@@ -1212,6 +1242,8 @@ interface OddsFeatures {
   cat_share: number;
   growth7: number;
   log_chains: number;
+  /** 1 when the snapshot carries no listed_at for the protocol, else 0. */
+  age_missing: number;
 }
 
 function fitLogit(x: number[][], y: number[], l2: number, iters = 200): number[] {
@@ -1242,11 +1274,28 @@ function fitLogit(x: number[][], y: number[], l2: number, iters = 200): number[]
 export function oddsValidation(snapshot: Snapshot): OddsValidation {
   const ctx = oddsContext(snapshot);
   const { peers, oy, base, feats, ctrl } = ctx;
-  const design = (idxs: number[], terms: string[]): number[][] =>
+  // The design, STANDARDISED: every feature enters the logistic as
+  // (value - mean) / sd, with the mean and sd taken from the TRAINING rows only
+  // (the caller passes them), so a held-out row never leaks into its own transform.
+  // A feature constant on the training rows has sd 0 and is standardised to 0.
+  const design = (idxs: number[], terms: string[], mu: Record<string, number>, sd: Record<string, number>): number[][] =>
     idxs.map((i) => [
       1,
-      ...terms.map((t) => (t === 'control' ? ctrl[i]! : feats[i]![t as keyof OddsFeatures])),
+      ...terms.map((t) => {
+        const raw = t === 'control' ? ctrl[i]! : feats[i]![t as keyof OddsFeatures];
+        return (raw - (mu[t] ?? 0)) / (sd[t] ?? 1);
+      }),
     ]);
+  const stats = (idxs: number[], terms: string[]): { mu: Record<string, number>; sd: Record<string, number> } => {
+    const mu: Record<string, number> = {};
+    const sd: Record<string, number> = {};
+    for (const t of terms) {
+      const vals = idxs.map((i) => (t === 'control' ? ctrl[i]! : feats[i]![t as keyof OddsFeatures]));
+      mu[t] = mean(vals);
+      sd[t] = popStd(vals) || 1;
+    }
+    return { mu, sd };
+  };
   const brier = (pred: number[], actual: number[]): number => mean(pred.map((p, i) => (p - actual[i]!) ** 2));
   const folds = peers.map((p) => seedHash(p.slug) % 10);
   const ocv = (terms: string[]): number => {
@@ -1254,9 +1303,41 @@ export function oddsValidation(snapshot: Snapshot): OddsValidation {
     for (let k = 0; k < 10; k++) {
       const te = peers.map((_, i) => i).filter((i) => folds[i] === k);
       const tr = peers.map((_, i) => i).filter((i) => folds[i] !== k);
-      const beta = fitLogit(design(tr, terms), tr.map((i) => oy[i]!), MODEL.odds_l2);
+      const { mu, sd } = stats(tr, terms);
+      const beta = fitLogit(design(tr, terms, mu, sd), tr.map((i) => oy[i]!), MODEL.odds_l2);
       te.forEach((i) => {
-        const z = design([i], terms)[0]!.reduce((a, v, j) => a + v * beta[j]!, 0);
+        const z = design([i], terms, mu, sd)[0]!.reduce((a, v, j) => a + v * beta[j]!, 0);
+        preds[i] = 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
+      });
+    }
+    return brier(preds, oy);
+  };
+  // Seeded-permutation 10-fold CV: the second held-out scheme. The folds are a seeded
+  // shuffle of the peers, so this scheme disagrees with the hash folds only by fold noise.
+  const permFolds = (() => {
+    const rng = mulberry32(seedHash('radar-8-odds-perm'));
+    const order = peers.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const tmp = order[i]!;
+      order[i] = order[j]!;
+      order[j] = tmp;
+    }
+    const f = new Array<number>(peers.length).fill(0);
+    order.forEach((idx, pos) => {
+      f[idx] = pos % 10;
+    });
+    return f;
+  })();
+  const operm = (terms: string[]): number => {
+    const preds = new Array<number>(peers.length).fill(0);
+    for (let k = 0; k < 10; k++) {
+      const te = peers.map((_, i) => i).filter((i) => permFolds[i] === k);
+      const tr = peers.map((_, i) => i).filter((i) => permFolds[i] !== k);
+      const { mu, sd } = stats(tr, terms);
+      const beta = fitLogit(design(tr, terms, mu, sd), tr.map((i) => oy[i]!), MODEL.odds_l2);
+      te.forEach((i) => {
+        const z = design([i], terms, mu, sd)[0]!.reduce((a, v, j) => a + v * beta[j]!, 0);
         preds[i] = 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
       });
     }
@@ -1265,33 +1346,42 @@ export function oddsValidation(snapshot: Snapshot): OddsValidation {
   const owf = (terms: string[]): { wf: number; ntr: number; nte: number } => {
     const tr = peers.map((_, i) => i).filter((i) => peers[i]!.listed_at !== null && peers[i]!.listed_at! <= MODEL.odds_cutoff);
     const te = peers.map((_, i) => i).filter((i) => peers[i]!.listed_at !== null && peers[i]!.listed_at! > MODEL.odds_cutoff);
-    const beta = fitLogit(design(tr, terms), tr.map((i) => oy[i]!), MODEL.odds_l2);
+    const { mu, sd } = stats(tr, terms);
+    const beta = fitLogit(design(tr, terms, mu, sd), tr.map((i) => oy[i]!), MODEL.odds_l2);
     const pred = te.map((i) => {
-      const z = design([i], terms)[0]!.reduce((a, v, j) => a + v * beta[j]!, 0);
+      const z = design([i], terms, mu, sd)[0]!.reduce((a, v, j) => a + v * beta[j]!, 0);
       return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
     });
     return { wf: brier(pred, te.map((i) => oy[i]!)), ntr: tr.length, nte: te.length };
   };
   // Sequential with revert-on-reject, plus a materiality gate: a term is kept only when it
-  // lowers BOTH the CV and the walk-forward Brier by at least 0.001. The gate exists because
-  // the chain-count term flips between fold schemes (no help at all with seeded-permutation
-  // folds, +0.0002 with hash folds): both are within fold noise, so it is not kept.
-  const cands: [string, string[]][] = [
-    ['base rate', []],
-    ['+ age, log', ['log_age']],
-    ['+ category token share, shrunk', ['cat_share']],
-    ['+ size curve, log TVL', ['log_tvl']],
-    ['+ 7-day growth', ['growth7']],
-    ['+ chain count, log', ['log_chains']],
-    ['+ control: growth of another row', ['control']],
+  // lowers BOTH the CV and the walk-forward Brier by at least 0.001 — except the
+  // listed_at-missing term, which the walk-forward split cannot see at all: its rows never
+  // enter that split (no listed_at, no side of the cutoff), and its training rows are all
+  // dated, so its coefficient is unidentified there and the walk-forward Brier cannot move.
+  // That term is kept only when it lowers BOTH the hash-fold CV and the seeded-permutation
+  // CV by at least 0.001. The gate exists because the chain-count term flips between fold
+  // schemes (no help at all with seeded-permutation folds, +0.0002 with hash folds): both
+  // are within fold noise, so it is not kept.
+  const cands: [string, string[], boolean][] = [
+    ['base rate', [], false],
+    ['+ age, log', ['log_age'], false],
+    ['+ category token share, shrunk', ['cat_share'], false],
+    ['+ 7-day growth', ['growth7'], false],
+    ['+ listed_at missing', ['age_missing'], true],
+    ['+ size curve, log TVL', ['log_tvl'], false],
+    ['+ chain count, log', ['log_chains'], false],
+    ['+ control: growth of another row', ['control'], false],
   ];
   const terms: OddsTermRow[] = [];
   let keptTerms: string[] = [];
   let bestCv = Infinity;
   let bestWf = Infinity;
-  for (const [label, next] of cands) {
+  let bestPerm = Infinity;
+  for (const [label, next, wfBlind] of cands) {
     const trial = [...keptTerms, ...next];
     const cv = ocv(trial);
+    const perm = operm(trial);
     const { wf, ntr, nte } = owf(trial);
     let verdict: OddsTermRow['verdict'];
     if (label.startsWith('+ control')) verdict = 'must not help';
@@ -1299,18 +1389,20 @@ export function oddsValidation(snapshot: Snapshot): OddsValidation {
       verdict = 'baseline';
       bestCv = cv;
       bestWf = wf;
-    } else if (cv < bestCv - MODEL.odds_materiality && wf < bestWf - MODEL.odds_materiality) {
+      bestPerm = perm;
+    } else if (wfBlind ? cv < bestCv - MODEL.odds_materiality && perm < bestPerm - MODEL.odds_materiality : cv < bestCv - MODEL.odds_materiality && wf < bestWf - MODEL.odds_materiality) {
       verdict = 'kept';
       bestCv = cv;
       bestWf = wf;
+      bestPerm = perm;
       keptTerms = trial;
     } else verdict = 'tested, not kept';
-    terms.push({ term: label, cv_brier: roundTo(cv, 3), wf_brier: roundTo(wf, 3), wf_train_n: ntr, wf_test_n: nte, verdict });
+    terms.push({ term: label, cv_brier: roundTo(cv, 3), wf_brier: roundTo(wf, 3), perm_cv_brier: roundTo(perm, 3), wf_train_n: ntr, wf_test_n: nte, verdict });
   }
   const allIdx = peers.map((_, i) => i);
-  const beta = fitLogit(design(allIdx, keptTerms), oy, MODEL.odds_l2);
+  const beta = fitLogit(design(allIdx, keptTerms, ctx.mu, ctx.sd), oy, MODEL.odds_l2);
   const predAll = allIdx.map((i) => {
-    const z = design([i], keptTerms)[0]!.reduce((a, v, j) => a + v * beta[j]!, 0);
+    const z = design([i], keptTerms, ctx.mu, ctx.sd)[0]!.reduce((a, v, j) => a + v * beta[j]!, 0);
     return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
   });
   return {
@@ -1335,6 +1427,10 @@ export interface OddsContext {
   catShare: Map<string, number>;
   feats: OddsFeatures[];
   ctrl: number[];
+  /** Standardisation of every odds feature over ALL peers: the shipped fit's transform.
+      Held-out scores never use this — they standardise inside their training fold. */
+  mu: Record<string, number>;
+  sd: Record<string, number>;
 }
 
 export function oddsContext(snapshot: Snapshot): OddsContext {
@@ -1358,13 +1454,21 @@ export function oddsContext(snapshot: Snapshot): OddsContext {
       cat_share: catShare.get(p.category ?? '') ?? base,
       growth7: Math.max(-80, Math.min(200, p.change_7d ?? 0)) / 100,
       log_chains: Math.log10(Math.max(1, p.chains.length)),
+      age_missing: age === null ? 1 : 0,
     };
   });
   const ctrl = feats.map((_, i) => feats[(i + 37) % feats.length]!.growth7);
-  return { peers, oy, base, catShare, feats, ctrl };
+  const mu: Record<string, number> = {};
+  const sd: Record<string, number> = {};
+  for (const t of ['log_tvl', 'log_age', 'cat_share', 'growth7', 'log_chains', 'age_missing'] as const) {
+    const vals = feats.map((f) => f[t]);
+    mu[t] = mean(vals);
+    sd[t] = popStd(vals) || 1;
+  }
+  return { peers, oy, base, catShare, feats, ctrl, mu, sd };
 }
 
-/** One protocol's token odds from the fitted logistic regression. */
+/** One protocol's token odds from the fitted logistic regression (standardised features). */
 export function tokenOdds(p: SnapshotProtocol, snapshot: Snapshot, ctx: OddsContext, beta: number[], keptTerms: string[]): number {
   const age = ageDays(p.listed_at, snapshot.as_of);
   const f: OddsFeatures = {
@@ -1373,10 +1477,11 @@ export function tokenOdds(p: SnapshotProtocol, snapshot: Snapshot, ctx: OddsCont
     cat_share: ctx.catShare.get(p.category ?? '') ?? ctx.base,
     growth7: Math.max(-80, Math.min(200, p.change_7d ?? 0)) / 100,
     log_chains: Math.log10(Math.max(1, p.chains.length)),
+    age_missing: age === null ? 1 : 0,
   };
   let z = beta[0]!;
   keptTerms.forEach((t, j) => {
-    z += beta[1 + j]! * f[t as keyof OddsFeatures];
+    z += beta[1 + j]! * ((f[t as keyof OddsFeatures] - (ctx.mu[t] ?? 0)) / (ctx.sd[t] ?? 1));
   });
   return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, z))));
 }
@@ -1629,6 +1734,8 @@ export function buildRadar(snapshot: Snapshot, meta: BuildMeta): { board: BoardR
     },
     odds_beta: oddsBeta,
     odds_kept_terms: keptTerms,
+    odds_mu: octx.mu,
+    odds_sd: octx.sd,
     cat_share: Object.fromEntries(octx.catShare),
     cat_base_rate: octx.base,
     validation,
@@ -1669,7 +1776,9 @@ export function validationScript(validation: Validation, snapshotSha256: string)
     train_comps_n: validation.train_comps_n,
     blind: validation.blind,
     loo: validation.loo,
-    time_split_per: validation.time_split_per,
+    // No time_split_per here: the page never renders the per-cutoff splits (only the
+    // pooled walk-forward, above), and the dossier text is capped — the per-cutoff
+    // splits stay in data.js, beside the page, where the pooled number comes from.
     time_split_pooled: validation.time_split_pooled,
     bootstrap_blind: validation.bootstrap_blind,
     bootstrap_loo: validation.bootstrap_loo,
@@ -1686,9 +1795,8 @@ export function validationScript(validation: Validation, snapshotSha256: string)
     gate_note: validation.gate_note,
     blind_predictions: validation.blind_predictions,
   };
-  return `// Radar-7 validation, computed by this entry's own program from the sealed snapshot.
-// The model is fitted on the snapshot's own 94 traded comparables (no external labels);
-// the strict submit gate: see gate_note.
+  return `// Radar-8 validation, computed by this entry's own program from the sealed snapshot
+// (94 traded comparables, no external labels). The strict submit gate: see gate_note.
 // window.TOKEN_RADAR_VALIDATION = ${JSON.stringify(compact)};\n`;
 }
 

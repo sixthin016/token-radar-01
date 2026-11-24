@@ -1,13 +1,13 @@
 // Token Radar's entry program (Node 22, standard library only).
 //
 // Reads the sealed snapshot from /input/snapshot.json (or --input <file|dir>), scores every
-// pre-token protocol with the radar-7 model in lib/model.ts, writes the ranked board to
+// pre-token protocol with the radar-8 model in lib/model.ts, writes the ranked board to
 // /output/board.json, writes the dashboard's data beside the page, and copies this repository's
 // dashboard/ and screenshots/ to /output. It also writes the validation's numbers to
 // /output/dashboard/validation.js, so the dossier's text carries the proof. Last, it writes
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun library.
 //
-// radar-7 fits its ridge on the snapshot's OWN 94 traded comparables: current market caps
+// radar-8 fits its ridge on the snapshot's OWN 94 traded comparables: current market caps
 // against current TVL, plus shrunk category shifts. No external labels, no TGE-day figures:
 // the value model follows from the snapshot's own figures, as the brief requires. The
 // dashboard is a static page, no framework and no network: dashboard/index.html,
@@ -100,6 +100,7 @@ writeFileSync(join(out, 'dossier.json'), buildDossier(out, { text_max_bytes: TEX
 const totals = boardTotals(board);
 const averageImplied = totals.rows > 0 ? Math.round(totals.impliedUsd / totals.rows) : 0;
 const v = radar.validation;
+const lastKeptOdds = [...v.odds.terms].reverse().find((t) => t.verdict === 'kept') ?? v.odds.terms[0]!;
 const ridge = radar.ridge;
 const verdicts = board.reduce<Record<string, number>>((acc, row) => {
   acc[row.farm.verdict] = (acc[row.farm.verdict] ?? 0) + 1;
@@ -108,12 +109,12 @@ const verdicts = board.reduce<Record<string, number>>((acc, row) => {
 process.stdout.write(
   `token radar: ${snapshot.protocols.length} protocols, ${snapshot.watchlist.length} on the watchlist, ${board.length} rows scored (FARM ${verdicts.FARM ?? 0}, MARGINAL ${verdicts.MARGINAL ?? 0}, SKIP ${verdicts.SKIP ?? 0})\n` +
     `token radar: input snapshot sha256 ${snapshotSha256} (${snapshotBytes.length} bytes); no external labels — fitted on the snapshot's own ${ridge.train_n} traded comparables\n` +
-    `token radar: radar-7 ridge: log10(current mcap) = ${ridge.intercept.toFixed(3)} + ${ridge.slope_std.toFixed(3)} x z(log10(current TVL)) fitted on ${ridge.train_n} snapshot comparables (lambda ${ridge.lambda}, lambda_cat ${ridge.lambda_cat}); raw slope ${ridge.raw_slope.toFixed(3)}; sigma ${ridge.sigma_log.toFixed(3)}; category shifts: ${ridge.categories.map((c) => `${c} ${ridge.shifts[c]}`).join(', ')}\n` +
-    `token radar: blind test (seed ${v.blind_seed}, ${v.blind_n} protocols, ${v.blind_scored_n} scored): pinball radar-7 ${v.blind.r7.pinball} vs flat ${v.blind.flat.pinball}; Spearman ${v.blind.r7.spearman} vs ${v.blind.flat.spearman}; 80% coverage ${v.blind.r7.coverage_80}\n` +
-    `token radar: leave-one-out pinball radar-7 ${v.loo.r7.pinball} vs flat ${v.loo.flat.pinball}; Spearman ${v.loo.r7.spearman} vs ${v.loo.flat.spearman}; walk-forward pooled pinball ${v.time_split_pooled.r7.pinball} vs flat ${v.time_split_pooled.flat.pinball}; Spearman ${v.time_split_pooled.r7.spearman} vs ${v.time_split_pooled.flat.spearman}\n` +
-    `token radar: paired bootstrap (${v.bootstrap_blind.b} resamples) radar-7 minus flat — blind pinball ${v.bootstrap_blind.pinball_delta} [${v.bootstrap_blind.pinball_ci_low}, ${v.bootstrap_blind.pinball_ci_high}], Spearman ${v.bootstrap_blind.spearman_delta} [${v.bootstrap_blind.spearman_ci_low}, ${v.bootstrap_blind.spearman_ci_high}]; LOO pinball ${v.bootstrap_loo.pinball_delta} [${v.bootstrap_loo.pinball_ci_low}, ${v.bootstrap_loo.pinball_ci_high}], Spearman ${v.bootstrap_loo.spearman_delta} [${v.bootstrap_loo.spearman_ci_low}, ${v.bootstrap_loo.spearman_ci_high}]; walk-forward pinball ${v.bootstrap_ts.pinball_delta} [${v.bootstrap_ts.pinball_ci_low}, ${v.bootstrap_ts.pinball_ci_high}]\n` +
+    `token radar: radar-8 ridge: log10(current mcap) = ${ridge.intercept.toFixed(3)} + ${ridge.slope_std.toFixed(3)} x z(log10(current TVL)) fitted on ${ridge.train_n} snapshot comparables (lambda ${ridge.lambda}, lambda_cat ${ridge.lambda_cat}); raw slope ${ridge.raw_slope.toFixed(3)}; sigma ${ridge.sigma_log.toFixed(3)}; category shifts: ${ridge.categories.map((c) => `${c} ${ridge.shifts[c]}`).join(', ')}\n` +
+    `token radar: blind test (seed ${v.blind_seed}, ${v.blind_n} protocols, ${v.blind_scored_n} scored): pinball radar-8 ${v.blind.r7.pinball} vs flat ${v.blind.flat.pinball}; Spearman ${v.blind.r7.spearman} vs ${v.blind.flat.spearman}; 80% coverage ${v.blind.r7.coverage_80}\n` +
+    `token radar: leave-one-out pinball radar-8 ${v.loo.r7.pinball} vs flat ${v.loo.flat.pinball}; Spearman ${v.loo.r7.spearman} vs ${v.loo.flat.spearman}; walk-forward pooled pinball ${v.time_split_pooled.r7.pinball} vs flat ${v.time_split_pooled.flat.pinball}; Spearman ${v.time_split_pooled.r7.spearman} vs ${v.time_split_pooled.flat.spearman}\n` +
+    `token radar: paired bootstrap (${v.bootstrap_blind.b} resamples) radar-8 minus flat — blind pinball ${v.bootstrap_blind.pinball_delta} [${v.bootstrap_blind.pinball_ci_low}, ${v.bootstrap_blind.pinball_ci_high}], Spearman ${v.bootstrap_blind.spearman_delta} [${v.bootstrap_blind.spearman_ci_low}, ${v.bootstrap_blind.spearman_ci_high}]; LOO pinball ${v.bootstrap_loo.pinball_delta} [${v.bootstrap_loo.pinball_ci_low}, ${v.bootstrap_loo.pinball_ci_high}], Spearman ${v.bootstrap_loo.spearman_delta} [${v.bootstrap_loo.spearman_ci_low}, ${v.bootstrap_loo.spearman_ci_high}]; walk-forward pinball ${v.bootstrap_ts.pinball_delta} [${v.bootstrap_ts.pinball_ci_low}, ${v.bootstrap_ts.pinball_ci_high}]\n` +
     `token radar: submit gate ${v.gate_passed ? 'PASSED' : 'NOT passed'} — ${v.gate_note}\n` +
-    `token radar: token odds: Brier ${v.odds.full_brier} full, CV ${v.odds.terms[v.odds.terms.length - 2]!.cv_brier} vs base ${v.odds.terms[0]!.cv_brier}; kept terms ${v.odds.kept_terms.join(', ')}\n` +
+    `token radar: token odds: Brier ${v.odds.full_brier} full, CV ${lastKeptOdds.cv_brier} vs base ${v.odds.terms[0]!.cv_brier}; kept terms ${v.odds.kept_terms.join(', ')}\n` +
     `token radar: accounting: ${Object.entries(radar.accounting).map(([g, n]) => `${g} ${n}`).join(', ')} (total ${snapshot.protocols.length})\n` +
     `token radar: board totals ${totals.rows} rows, $${totals.impliedUsd.toLocaleString('en-US')} implied, $${totals.tvlUsd.toLocaleString('en-US')} TVL, $${averageImplied.toLocaleString('en-US')} average implied per row\n` +
     `token radar: wrote ${join(out, 'board.json')}, ${join(out, 'data.js')}, ${join(out, 'dashboard')} (${dashboardFiles.length + 1} files), ${join(out, 'screenshots')} (${shots.length} images) and ${join(out, 'dossier.json')}\n` +
