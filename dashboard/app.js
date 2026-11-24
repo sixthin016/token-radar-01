@@ -254,7 +254,7 @@
   // --- scatter: the 94 traded comparables the value model is fitted on ---
   function scatterEl() {
     var comps = DATA.comps;
-    var W = 720, H = 340, PL = 64, PR = 16, PT = 14, PB = 40;
+    var W = 720, H = 240, PL = 64, PR = 16, PT = 14, PB = 40;
     var xs = comps.map(function (c) { return c.log_tvl; });
     var ys = comps.map(function (c) { return c.log_mcap; });
     var x0 = Math.floor(Math.min.apply(null, xs) - 0.3), x1 = Math.ceil(Math.max.apply(null, xs) + 0.3);

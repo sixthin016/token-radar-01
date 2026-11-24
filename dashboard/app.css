@@ -25,22 +25,22 @@ body { margin: 0; background: var(--canvas); color: var(--text); font-family: va
 a { color: var(--accent); }
 a.skip { position: absolute; left: -9999px; top: 0; background: var(--accent); color: #06210f; padding: 8px 12px; border-radius: 0 0 var(--radius-sm) 0; font-weight: 700; z-index: 20; }
 a.skip:focus { left: 0; }
-main { max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px; }
+main { max-width: 1240px; margin: 0 auto; padding: 12px 16px 64px; }
 h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; letter-spacing: -0.01em; }
-h2 { font-size: 17px; margin: 28px 0 10px; }
+h2 { font-size: 17px; margin: 16px 0 10px; }
 h3 { font-size: 14px; margin: 20px 0 8px; }
-.sub { color: var(--muted); margin: 0 0 16px; max-width: 900px; }
+.sub { color: var(--muted); margin: 0 0 10px; max-width: 900px; }
 .mono { font-family: var(--mono); font-size: 12px; }
 .small { font-size: 12px; color: var(--muted); }
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 section.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-top: 16px; }
-.kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 16px; }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-top: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; }
 .kpi .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); }
 .kpi .v { font-size: 22px; font-weight: 700; margin-top: 4px; font-family: var(--mono); }
 .kpi .v small { font-size: 13px; color: var(--muted); font-weight: 400; }
 .kpi .d { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.verify { background: #0f2a1a; border: 1px solid #1f5c34; border-radius: var(--radius); padding: 12px 16px; margin-top: 16px; font-size: 13px; }
+.verify { background: #0f2a1a; border: 1px solid #1f5c34; border-radius: var(--radius); padding: 12px 16px; margin-top: 12px; font-size: 13px; }
 .verify b { color: var(--accent); }
 .verify .fail { color: var(--warn); }
 .formula { font-family: var(--mono); font-size: 13px; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 8px 10px; margin-top: 10px; overflow-x: auto; }
